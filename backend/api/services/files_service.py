@@ -1,4 +1,3 @@
-import os
 import uuid
 import shutil
 from pathlib import Path
@@ -9,8 +8,8 @@ from fastapi import UploadFile
 # CONFIG
 # =========================
 
-UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
+UPLOAD_DIR = Path(__file__).parent.parent.parent / "storage" / "documents"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {"pdf", "txt"}
 
@@ -19,28 +18,24 @@ ALLOWED_EXTENSIONS = {"pdf", "txt"}
 # =========================
 
 def is_allowed_file(filename: str) -> bool:
-    """Check if file extension is allowed."""
     ext = filename.split(".")[-1].lower()
     return ext in ALLOWED_EXTENSIONS
 
 
 def generate_filename(original_filename: str) -> str:
-    """Generate a safe unique filename using UUID."""
     ext = original_filename.split(".")[-1].lower()
     return f"{uuid.uuid4()}.{ext}"
 
 
 # =========================
-# CORE FILE OPERATIONS
+# CORE SERVICE
 # =========================
 
-async def save_file(file: UploadFile, folder: Optional[str] = None) -> str:
+async def save_file(file: UploadFile, hashed_name: str, folder: Optional[str] = None) -> str:
     """
-    Save uploaded file to disk.
+    Save file using a pre-generated hashed filename.
     Returns saved file path.
     """
-    if not is_allowed_file(file.filename):
-        raise ValueError("File type not allowed")
 
     target_dir = UPLOAD_DIR
 
@@ -48,8 +43,8 @@ async def save_file(file: UploadFile, folder: Optional[str] = None) -> str:
         target_dir = UPLOAD_DIR / folder
         target_dir.mkdir(parents=True, exist_ok=True)
 
-    filename = generate_filename(file.filename)
-    file_path = target_dir / filename
+    # use provided hashed name instead of generating it here
+    file_path = target_dir / hashed_name
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -58,7 +53,6 @@ async def save_file(file: UploadFile, folder: Optional[str] = None) -> str:
 
 
 def delete_file(file_path: str) -> bool:
-    """Delete a file if it exists."""
     path = Path(file_path)
 
     if path.exists() and path.is_file():
@@ -69,7 +63,6 @@ def delete_file(file_path: str) -> bool:
 
 
 def get_file_info(file_path: str) -> dict:
-    """Get metadata about a file."""
     path = Path(file_path)
 
     if not path.exists():
@@ -84,11 +77,7 @@ def get_file_info(file_path: str) -> dict:
 
 
 def list_files(folder: Optional[str] = None) -> List[str]:
-    """List all files in upload directory or subfolder."""
-    target_dir = UPLOAD_DIR
-
-    if folder:
-        target_dir = UPLOAD_DIR / folder
+    target_dir = UPLOAD_DIR / folder if folder else UPLOAD_DIR
 
     if not target_dir.exists():
         return []

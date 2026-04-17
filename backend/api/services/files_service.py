@@ -31,7 +31,7 @@ def generate_filename(original_filename: str) -> str:
 # CORE SERVICE
 # =========================
 
-async def save_file(file: UploadFile, hashed_name: str, folder: Optional[str] = None) -> str:
+async def save_file_fs(file: UploadFile, hashed_name: str, folder: Optional[str] = None) -> str:
     """
     Save file using a pre-generated hashed filename.
     Returns saved file path.
@@ -52,7 +52,7 @@ async def save_file(file: UploadFile, hashed_name: str, folder: Optional[str] = 
     return str(file_path)
 
 
-def delete_file(file_path: str) -> bool:
+def delete_file_fs(file_path: str) -> bool:
     path = Path(file_path)
 
     if path.exists() and path.is_file():
@@ -62,7 +62,7 @@ def delete_file(file_path: str) -> bool:
     return False
 
 
-def get_file_info(file_path: str) -> dict:
+def get_file_info_fs(file_path: str) -> dict:
     path = Path(file_path)
 
     if not path.exists():
@@ -76,7 +76,7 @@ def get_file_info(file_path: str) -> dict:
     }
 
 
-def list_files(folder: Optional[str] = None) -> List[str]:
+def list_files_fs(folder: Optional[str] = None) -> List[str]:
     target_dir = UPLOAD_DIR / folder if folder else UPLOAD_DIR
 
     if not target_dir.exists():

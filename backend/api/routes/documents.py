@@ -1,17 +1,26 @@
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
-from services.sqlite_service import get_all_files, get_file_by_name, delete_file as db_delete_file, get_file_by_id
-from services.files_service import delete_file as fs_delete_file
 import mimetypes
+
+from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
+
+from services.postgres_service import get_all_files, get_file_by_id, insert_file, delete_file_db
+from services.files_service import delete_file_fs, is_allowed_file, generate_filename, save_file_fs
+
 
 router = APIRouter()
 
 
+# =========================
+# GET ALL DOCUMENTS
+# =========================
 @router.get("/documents")
 def list_documents():
     return get_all_files()
 
 
+# =========================
+# VIEW DOCUMENT
+# =========================
 @router.get("/documents/{file_id}/view")
 def view_document(file_id: int):
     doc = get_file_by_id(file_id)
@@ -19,6 +28,7 @@ def view_document(file_id: int):
         raise HTTPException(status_code=404, detail="Document not found")
 
     mime_type, _ = mimetypes.guess_type(doc["path"])
+
     return FileResponse(
         path=doc["path"],
         media_type=mime_type or "application/octet-stream",
@@ -26,12 +36,54 @@ def view_document(file_id: int):
     )
 
 
+# =========================
+# DELETE DOCUMENT
+# =========================
 @router.delete("/documents/{file_id}")
 def delete_document(file_id: int):
     doc = get_file_by_id(file_id)
+
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    fs_delete_file(doc["path"])
-    db_delete_file(file_id)
+    delete_file_fs(doc["path"])
+    delete_file_db(file_id)
+
     return {"message": "Document deleted successfully"}
+
+
+# =========================
+# UPLOAD FILE
+# =========================
+@router.post("/upload")
+async def upload(file: UploadFile = File(...)):
+    try:
+        if not is_allowed_file(file.filename):
+            raise HTTPException(
+                status_code=400,
+                detail="Only .pdf and .txt files are allowed"
+            )
+
+        hashed_name = generate_filename(file.filename)
+        file_path = await save_file_fs(file, hashed_name)
+        insert_file(
+            original_name=file.filename,
+            hashed_name=hashed_name,
+            path=file_path  
+        )
+
+        insert_file(
+            original_name=file.filename,
+            hashed_name=hashed_name,
+            path=file_path
+        )
+
+        return {
+            "message": "file uploaded successfully",
+            "original_name": file.filename,
+            "hashed_name": hashed_name,
+            "path": file_path
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -1,10 +1,12 @@
 import mimetypes
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 
-from services.postgres_service import get_all_files, get_file_by_id, insert_file, delete_file_db
-from services.files_service import delete_file_fs, is_allowed_file, generate_filename, save_file_fs
+from database.postgres_service import get_all_files, get_file_by_id, insert_file, delete_file_db
+from storage.files_service import delete_file_fs, is_allowed_file, generate_filename, save_file_fs
+from ingestion.ingestion_service import ingest_and_store
 
 
 router = APIRouter()
@@ -66,17 +68,16 @@ async def upload(file: UploadFile = File(...)):
 
         hashed_name = generate_filename(file.filename)
         file_path = await save_file_fs(file, hashed_name)
-        insert_file(
+        file_size = Path(file_path).stat().st_size
+
+        file_id = insert_file(
             original_name=file.filename,
             hashed_name=hashed_name,
-            path=file_path  
+            path=file_path,
+            size=file_size
         )
 
-        insert_file(
-            original_name=file.filename,
-            hashed_name=hashed_name,
-            path=file_path
-        )
+        ingest_and_store(file_path, file_id)
 
         return {
             "message": "file uploaded successfully",

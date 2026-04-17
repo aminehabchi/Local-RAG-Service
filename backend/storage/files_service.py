@@ -8,7 +8,7 @@ from fastapi import UploadFile
 # CONFIG
 # =========================
 
-UPLOAD_DIR = Path(__file__).parent.parent.parent / "storage" / "documents"
+UPLOAD_DIR = Path(__file__).parent / "documents"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {"pdf", "txt"}

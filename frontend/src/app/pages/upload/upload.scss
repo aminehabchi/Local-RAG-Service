@@ -86,7 +86,9 @@
     &:hover { background: #f8717115; }
   }
 
-  &--sm { padding: 0.32rem 0.75rem; font-size: 0.78rem; }
+  &--sm    { padding: 0.32rem 0.75rem; font-size: 0.78rem; }
+  &--ghost        { background: none; color: #475569; border: 1px solid #1e2433; &:hover { background: #1e2433; color: #cbd5e1; } }
+  &--danger-solid { background: #dc2626; color: #fff; border: none; &:hover { background: #b91c1c; } }
 }
 
 /* ── Status Banner ── */
@@ -107,15 +109,242 @@
 .status-icon { font-size: 1rem; }
 
 .spinner {
-  width: 15px;
-  height: 15px;
+  width: 15px; height: 15px;
   border: 2px solid #334155;
   border-top-color: #6366f1;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
   flex-shrink: 0;
+  &--sm { width: 13px; height: 13px; }
+  &--xs { width: 11px; height: 11px; border-width: 1.5px; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Upload Queue ── */
+.upload-queue {
+  background: #13161f;
+  border: 1px solid #1e2433;
+  border-radius: 14px;
+  overflow: hidden;
+  animation: fade-in 0.18s ease;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.8rem 1.1rem;
+    border-bottom: 1px solid #1e2433;
+    background: #0f1117;
+  }
+
+  &__title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #94a3b8;
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+}
+
+.queue-done-icon {
+  color: #4ade80;
+  font-size: 0.85rem;
+}
+
+/* ── Upload Item ── */
+.upload-item {
+  padding: 0.9rem 1.1rem;
+  border-bottom: 1px solid #1a1e2a;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  animation: slide-in 0.22s ease both;
+  transition: background 0.3s;
+
+  &:last-child { border-bottom: none; }
+  &--done  { background: #060e06; }
+  &--error { background: #110505; }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  &__icon { font-size: 1rem; flex-shrink: 0; }
+
+  &__name {
+    flex: 1;
+    font-size: 0.84rem;
+    font-weight: 500;
+    color: #cbd5e1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__meta {
+    font-size: 0.72rem;
+    color: #475569;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  &__estimate { color: #2d3f55; }
+
+  &__phase-badge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    flex-shrink: 0;
+
+    &.badge--uploading { background: #1e1f40; color: #818cf8; }
+    &.badge--ingesting { background: #1a2d1a; color: #86efac; }
+    &.badge--done      { background: #0d2010; color: #4ade80; }
+    &.badge--error     { background: #2d0a0a; color: #f87171; }
+  }
+
+  &__error {
+    font-size: 0.76rem;
+    color: #f87171;
+    margin: 0;
+    padding-left: 0.1rem;
+  }
+
+  &__dismiss {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: #334155;
+    font-size: 0.75rem;
+    cursor: pointer;
+    padding: 0.2rem 0.35rem;
+    border-radius: 5px;
+    line-height: 1;
+    transition: background 0.12s, color 0.12s;
+    &:hover { background: #1e2433; color: #94a3b8; }
+  }
+}
+
+/* ── Two-phase Progress Rows ── */
+.progress-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.progress-row {
+  display: grid;
+  grid-template-columns: 68px 1fr 34px;
+  align-items: center;
+  gap: 0.6rem;
+  transition: opacity 0.3s;
+
+  &--inactive { opacity: 0.28; }
+
+  &__label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: #475569;
+    white-space: nowrap;
+  }
+
+  &__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #1e2433;
+    flex-shrink: 0;
+    transition: background 0.3s;
+
+    &.dot--active {
+      background: #6366f1;
+      box-shadow: 0 0 5px #6366f180;
+      animation: dot-pulse 1.6s ease-in-out infinite;
+    }
+
+    &.dot--done { background: #4ade80; box-shadow: none; animation: none; }
+  }
+
+  &__track {
+    height: 5px;
+    background: #151c2a;
+    border-radius: 999px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  &__pct {
+    font-size: 0.68rem;
+    color: #334155;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ── Progress Fill variants ── */
+.progress-row__fill {
+  height: 100%;
+  border-radius: 999px;
+  width: 0%;
+  transition: width 0.25s ease, background 0.4s ease;
+  background: #1e2433;
+  position: relative;
+  overflow: hidden;
+
+  &.fill--active {
+    background: linear-gradient(90deg, #6366f1, #a5b4fc);
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+      animation: shimmer 1.4s ease-in-out infinite;
+    }
+  }
+
+  &.fill--ingest {
+    background: linear-gradient(90deg, #16a34a, #4ade80);
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+      animation: shimmer 1.6s ease-in-out infinite;
+    }
+  }
+
+  &.fill--complete { background: linear-gradient(90deg, #15803d, #4ade80); }
+  &.fill--error    { background: #dc2626; }
+}
+
+@keyframes shimmer {
+  0%   { transform: translateX(-150%); }
+  100% { transform: translateX(250%); }
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1;    transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.75); }
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 
 /* ── Docs Section ── */
 .docs-section { display: flex; flex-direction: column; gap: 1rem; }
@@ -208,6 +437,8 @@
 
 .doc-icon { font-size: 1.1rem; flex-shrink: 0; }
 
+.doc-size   { color: #475569; font-size: 0.8rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.doc-chunks { color: #475569; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
 .doc-date { color: #475569; font-size: 0.8rem; white-space: nowrap; }
 
 .doc-actions {
@@ -227,6 +458,49 @@
 
   &--pdf { background: #2d1b4e; color: #c084fc; }
   &--txt { background: #1a2e1a; color: #86efac; }
+}
+
+/* ── Confirm Modal ── */
+.modal--confirm {
+  max-width: 360px;
+  height: auto;
+  padding: 1.25rem 1.5rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  text-align: center;
+}
+
+.confirm-icon  { font-size: 1.5rem; line-height: 1; }
+
+.confirm-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  margin: 0;
+}
+
+.confirm-msg {
+  font-size: 0.82rem;
+  color: #64748b;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.confirm-filename {
+  color: #94a3b8;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  width: 100%;
+
+  .btn { flex: 1; justify-content: center; }
 }
 
 /* ── PDF Viewer Modal ── */
@@ -249,11 +523,12 @@
   border-radius: 14px;
   width: 100%;
   max-width: 900px;
-  height: 90vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   animation: slide-up 0.18s ease;
+
+  &--pdf     { height: 90vh; max-width: 900px; }
 }
 
 .modal-header {

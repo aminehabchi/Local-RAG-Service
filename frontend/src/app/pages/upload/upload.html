@@ -22,20 +22,110 @@
             d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
         </svg>
       </div>
-      <p class="drop-zone__label">Drag &amp; drop your file here</p>
+      <p class="drop-zone__label">Drag &amp; drop your files here</p>
       <p class="drop-zone__hint">or</p>
-      <label class="btn btn--primary" for="file-input">Browse file</label>
-      <input id="file-input" type="file" accept=".pdf,.txt" hidden (change)="onFileSelected($event)" />
+      <label class="btn btn--primary" for="file-input">Browse files</label>
+      <input id="file-input" type="file" accept=".pdf,.txt" multiple hidden (change)="onFileSelected($event)" />
       <p class="drop-zone__formats">Supported formats: PDF, TXT</p>
     </div>
 
-    <!-- Status Banner -->
-    @if (status() !== 'idle') {
-      <div class="status-banner" [class]="'status-banner--' + status()">
-        @if (status() === 'uploading') { <span class="spinner"></span> }
-        @if (status() === 'success') { <span class="status-icon">✓</span> }
-        @if (status() === 'error') { <span class="status-icon">✕</span> }
-        {{ statusMessage() }}
+    <!-- Upload Queue -->
+    @if (hasQueue()) {
+      <div class="upload-queue">
+        <div class="upload-queue__header">
+          <span class="upload-queue__title">
+            @if (!allDone()) {
+              <span class="spinner spinner--sm"></span>
+              {{ uploadQueue().length }} file{{ uploadQueue().length > 1 ? 's' : '' }} in queue
+            } @else {
+              <span class="queue-done-icon">✓</span>
+              All files processed
+            }
+          </span>
+          <div class="upload-queue__actions">
+            @if (allDone()) {
+              <button class="btn btn--ghost btn--sm" (click)="clearDone()">Clear all</button>
+            }
+          </div>
+        </div>
+
+        @for (item of uploadQueue(); track item.id; let i = $index) {
+          <div class="upload-item" [class]="'upload-item--' + item.phase" [style.animation-delay]="(i * 50) + 'ms'">
+
+            <!-- File header -->
+            <div class="upload-item__header">
+              <span class="upload-item__icon">{{ getFileIcon(item.name) }}</span>
+              <span class="upload-item__name" [title]="item.name">{{ item.name }}</span>
+              <span class="upload-item__meta">
+                {{ formatSize(item.size) }}
+                @if (item.phase !== 'error') {
+                  <span class="upload-item__estimate">· {{ estimateIngestionTime(item.name, item.size) }} to ingest</span>
+                }
+              </span>
+              <span class="upload-item__phase-badge"
+                [class.badge--uploading]="item.phase === 'uploading' || item.phase === 'pending'"
+                [class.badge--ingesting]="item.phase === 'ingesting'"
+                [class.badge--done]="item.phase === 'done'"
+                [class.badge--error]="item.phase === 'error'">
+                @if (item.phase === 'pending')   { Pending }
+                @if (item.phase === 'uploading') { Uploading }
+                @if (item.phase === 'ingesting') { Ingesting }
+                @if (item.phase === 'done')      { Done }
+                @if (item.phase === 'error')     { Error }
+              </span>
+              @if (item.phase === 'done' || item.phase === 'error') {
+                <button class="upload-item__dismiss" (click)="dismissItem(item.id)" title="Dismiss">✕</button>
+              }
+            </div>
+
+            <!-- Two progress rows -->
+            <div class="progress-rows">
+
+              <!-- Upload row -->
+              <div class="progress-row">
+                <div class="progress-row__label">
+                  <span class="progress-row__dot"
+                    [class.dot--active]="item.phase === 'uploading' || item.phase === 'pending'"
+                    [class.dot--done]="item.uploadProgress === 100"></span>
+                  Upload
+                </div>
+                <div class="progress-row__track">
+                  <div class="progress-row__fill"
+                    [class.fill--active]="item.phase === 'uploading'"
+                    [class.fill--complete]="item.uploadProgress === 100 && item.phase !== 'error'"
+                    [class.fill--error]="item.phase === 'error'"
+                    [style.width.%]="item.uploadProgress">
+                  </div>
+                </div>
+                <span class="progress-row__pct">{{ item.uploadProgress }}%</span>
+              </div>
+
+              <!-- Ingestion row -->
+              <div class="progress-row" [class.progress-row--inactive]="item.phase === 'uploading' || item.phase === 'pending'">
+                <div class="progress-row__label">
+                  <span class="progress-row__dot"
+                    [class.dot--active]="item.phase === 'ingesting'"
+                    [class.dot--done]="item.phase === 'done'"></span>
+                  Ingest
+                </div>
+                <div class="progress-row__track">
+                  <div class="progress-row__fill"
+                    [class.fill--ingest]="item.phase === 'ingesting'"
+                    [class.fill--complete]="item.phase === 'done'"
+                    [class.fill--error]="item.phase === 'error'"
+                    [style.width.%]="item.ingestProgress">
+                  </div>
+                </div>
+                <span class="progress-row__pct">{{ item.ingestProgress | number:'1.0-0' }}%</span>
+              </div>
+
+            </div>
+
+            @if (item.phase === 'error') {
+              <p class="upload-item__error">{{ item.error }}</p>
+            }
+          </div>
+        }
       </div>
     }
 
@@ -48,7 +138,7 @@
 
       @if (loadingDocs()) {
         <div class="loading">
-          <span class="spinner"></span> Loading documents...
+          <span class="spinner"></span> Loading documents…
         </div>
       } @else if (documents().length === 0) {
         <div class="empty-state">
@@ -63,6 +153,8 @@
                 <th>#</th>
                 <th>File name</th>
                 <th>Type</th>
+                <th>Size</th>
+                <th>Chunks</th>
                 <th>Uploaded</th>
                 <th>Actions</th>
               </tr>
@@ -82,6 +174,8 @@
                       {{ isPdf(doc.original_name) ? 'PDF' : 'TXT' }}
                     </span>
                   </td>
+                  <td class="doc-size">{{ formatSize(doc.size) }}</td>
+                  <td class="doc-chunks">{{ doc.chunk_count }}</td>
                   <td class="doc-date">{{ doc.created_at | date:'mediumDate' }}</td>
                   <td class="doc-actions">
                     @if (isPdf(doc.original_name)) {
@@ -93,7 +187,7 @@
                         View
                       </button>
                     }
-                    <button class="btn btn--danger btn--sm" (click)="deleteDocument(doc)">
+                    <button class="btn btn--danger btn--sm" (click)="confirmDelete(doc)">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                         <polyline points="3 6 5 6 21 6"/>
                         <path d="M19 6l-1 14H6L5 6"/>
@@ -113,10 +207,28 @@
   </main>
 </div>
 
+<!-- Delete Confirmation Modal -->
+@if (pendingDelete()) {
+  <div class="modal-backdrop" (click)="cancelDelete()">
+    <div class="modal modal--confirm" (click)="$event.stopPropagation()">
+      <div class="confirm-icon">🗑️</div>
+      <h3 class="confirm-title">Delete file?</h3>
+      <p class="confirm-msg">
+        <span class="confirm-filename">{{ pendingDelete()!.original_name }}</span>
+        will be permanently removed from the knowledge base.
+      </p>
+      <div class="confirm-actions">
+        <button class="btn btn--ghost" (click)="cancelDelete()">Cancel</button>
+        <button class="btn btn--danger-solid" (click)="deleteDocument()">Delete</button>
+      </div>
+    </div>
+  </div>
+}
+
 <!-- PDF Viewer Modal -->
 @if (viewerUrl()) {
   <div class="modal-backdrop" (click)="closeViewer()">
-    <div class="modal" (click)="$event.stopPropagation()">
+    <div class="modal modal--pdf" (click)="$event.stopPropagation()">
       <div class="modal-header">
         <span class="modal-title">
           <span>📄</span> {{ viewerName() }}

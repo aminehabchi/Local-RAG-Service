@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpRequest, HttpEvent } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 export interface Document {
@@ -7,6 +7,8 @@ export interface Document {
   original_name: string;
   hashed_name: string;
   path: string;
+  size: number;
+  chunk_count: number;
   created_at: string;
 }
 
@@ -23,10 +25,13 @@ export class UploadService {
 
   constructor(private http: HttpClient) {}
 
-  uploadFile(file: File): Observable<UploadResponse> {
+  uploadFile(file: File): Observable<HttpEvent<UploadResponse>> {
     const formData = new FormData();
     formData.append('file', file);
-    return this.http.post<UploadResponse>(`${this.apiUrl}/upload`, formData);
+    const req = new HttpRequest('POST', `${this.apiUrl}/upload`, formData, {
+      reportProgress: true,
+    });
+    return this.http.request<UploadResponse>(req);
   }
 
   getDocuments(): Observable<Document[]> {

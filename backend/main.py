@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routes.documents import router as documents_router
-from services.postgres_service import init_db
+from api.routes.documents import router as documents_router
+from database.postgres_service import init_db
 
 app = FastAPI()
 

@@ -47,9 +47,10 @@ def init_db():
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS files (
             id SERIAL PRIMARY KEY,
-            original_name TEXT NOT NULL,
+            original_name TEXT NOT NULL UNIQUE,
             hashed_name TEXT NOT NULL UNIQUE,
             path TEXT NOT NULL,
+            size BIGINT NOT NULL DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
@@ -78,7 +79,7 @@ def init_db():
 # =========================
 # INSERT FILE
 # =========================
-def insert_file(original_name: str, hashed_name: str, path: str):
+def insert_file(original_name: str, hashed_name: str, path: str, size: int = 0):
     conn = create_connection()
     if not conn:
         return
@@ -87,13 +88,39 @@ def insert_file(original_name: str, hashed_name: str, path: str):
         cursor = conn.cursor()
 
         cursor.execute("""
-            INSERT INTO files (original_name, hashed_name, path)
-            VALUES (%s, %s, %s)
-        """, (original_name, hashed_name, path))
+            INSERT INTO files (original_name, hashed_name, path, size)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id
+        """, (original_name, hashed_name, path, size))
+
+        file_id = cursor.fetchone()["id"]
+        conn.commit()
+        return file_id
+    except Exception as e:
+        print(f"Insert error: {e}")
+    finally:
+        conn.close()
+
+
+# =========================
+# INSERT EMBEDDING
+# =========================
+def insert_embedding(document_id: int, content: str, embedding: List[float], chunk_index: int = 0):
+    conn = create_connection()
+    if not conn:
+        return
+
+    try:
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            INSERT INTO document_chunks (file_id, chunk_index, content, embedding)
+            VALUES (%s, %s, %s, %s)
+        """, (document_id, chunk_index, content, str(embedding)))
 
         conn.commit()
     except Exception as e:
-        print(f"Insert error: {e}")
+        print(f"Insert embedding error: {e}")
     finally:
         conn.close()
 
@@ -110,9 +137,12 @@ def get_all_files() -> List[Dict]:
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT id, original_name, hashed_name, path, created_at
-            FROM files
-            ORDER BY id DESC
+            SELECT f.id, f.original_name, f.hashed_name, f.path, f.size, f.created_at,
+                   COUNT(dc.id) AS chunk_count
+            FROM files f
+            LEFT JOIN document_chunks dc ON dc.file_id = f.id
+            GROUP BY f.id
+            ORDER BY f.id DESC
         """)
 
         return cursor.fetchall()

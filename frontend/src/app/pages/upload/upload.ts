@@ -1,5 +1,6 @@
 import { Component, OnInit, OnDestroy, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { HttpEventType, HttpResponse } from '@angular/common/http';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { UploadService, Document } from '../../services/upload';
@@ -21,7 +22,7 @@ function nextId(): string { return `f${Date.now()}-${_seq++}`; }
 
 @Component({
   selector: 'app-upload',
-  imports: [CommonModule],
+  imports: [CommonModule, RouterLink],
   templateUrl: './upload.html',
   styleUrl: './upload.scss',
 })

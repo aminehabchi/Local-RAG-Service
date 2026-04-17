@@ -1,0 +1,112 @@
+<div class="page">
+
+  <!-- Header / Nav -->
+  <header class="header">
+    <div class="header__top">
+      <div class="logo">
+        <span class="logo-icon">🔍</span>
+        <span class="logo-text">Local RAG Service</span>
+      </div>
+      <nav class="nav">
+        <a class="nav__link" routerLink="/">Upload</a>
+        <a class="nav__link nav__link--active" routerLink="/search">Search</a>
+      </nav>
+    </div>
+    <p class="subtitle">Search your knowledge base with natural language</p>
+  </header>
+
+  <main class="main">
+
+    <!-- Search bar -->
+    <div class="search-wrap">
+      <div class="search-box" [class.search-box--focus]="status() === 'loading'">
+        <svg class="search-box__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input
+          #queryInput
+          class="search-box__input"
+          type="text"
+          placeholder="Ask anything about your documents…"
+          [(ngModel)]="query"
+          (keydown.enter)="submit()"
+          [disabled]="status() === 'loading'"
+          autofocus
+        />
+        @if (query) {
+          <button class="search-box__clear" (click)="clear()" title="Clear">✕</button>
+        }
+      </div>
+
+      <div class="search-controls">
+        <label class="limit-label">
+          Top results
+          <select class="limit-select" [(ngModel)]="limit" [disabled]="status() === 'loading'">
+            <option [value]="3">3</option>
+            <option [value]="5">5</option>
+            <option [value]="10">10</option>
+            <option [value]="20">20</option>
+          </select>
+        </label>
+        <button class="btn btn--primary" (click)="submit()" [disabled]="!query.trim() || status() === 'loading'">
+          @if (status() === 'loading') { <span class="spinner spinner--sm"></span> Searching… }
+          @else { Search }
+        </button>
+      </div>
+    </div>
+
+    <!-- States -->
+    @if (status() === 'error') {
+      <div class="alert alert--error">
+        <span>✕</span> {{ error() }}
+      </div>
+    }
+
+    @if (status() === 'done' && results().length === 0) {
+      <div class="empty-state">
+        <span style="font-size:2rem">🔎</span>
+        <p>No matching chunks found for <strong>"{{ query }}"</strong>.</p>
+      </div>
+    }
+
+    <!-- Results -->
+    @if (results().length > 0) {
+      <div class="results-header">
+        <span class="results-count">{{ results().length }} result{{ results().length > 1 ? 's' : '' }}</span>
+        <span class="results-query">for "<em>{{ query }}</em>"</span>
+      </div>
+
+      <div class="results">
+        @for (r of results(); track r.id; let i = $index) {
+          <div class="result-card" [style.animation-delay]="(i * 55) + 'ms'">
+
+            <div class="result-card__head">
+              <span class="result-card__file">
+                {{ getFileIcon(r.original_name) }} {{ r.original_name }}
+              </span>
+              <span class="result-card__chunk">chunk #{{ r.chunk_index }}</span>
+              <span class="result-card__score" [class]="scoreClass(r.score)">
+                {{ scoreLabel(r.score) }} · {{ (r.score * 100) | number:'1.0-0' }}%
+              </span>
+            </div>
+
+            <div class="result-card__bar-wrap">
+              <div class="result-card__bar" [class]="scoreClass(r.score)" [style.width.%]="r.score * 100"></div>
+            </div>
+
+            <p class="result-card__content">{{ r.content }}</p>
+
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Idle hint -->
+    @if (status() === 'idle') {
+      <div class="idle-hint">
+        <p>Type a question or keyword and press <kbd>Enter</kbd> to search across all ingested documents.</p>
+      </div>
+    }
+
+  </main>
+</div>

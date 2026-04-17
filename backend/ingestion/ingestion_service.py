@@ -1,6 +1,9 @@
 from typing import List, Dict
+from langchain_ollama import OllamaEmbeddings
 from ingestion.ingestion_utils import extract_text
-from database.postgres_service import insert_embedding
+from database.postgres_service import insert_embedding, update_file_status
+
+_embeddings = OllamaEmbeddings(model="nomic-embed-text")
 
 def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> List[str]:
     chunks = []
@@ -15,11 +18,7 @@ def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> List[str]
 
 
 def embed_text(text: str) -> List[float]:
-    """
-    Replace later with OpenAI / Ollama embeddings
-    """
-    import random
-    return [random.random() for _ in range(384)]
+    return _embeddings.embed_documents([text])[0]
 
 
 def process_document(file_path: str) -> List[Dict]:
@@ -46,25 +45,20 @@ def process_document(file_path: str) -> List[Dict]:
     return result
 
 def ingest_and_store(file_path: str, file_id: int) -> None:
-    """
-    Full pipeline:
-    file → text → chunks → embeddings → store in DB
-    """
+    try:
+        text = extract_text(file_path)
+        chunks = chunk_text(text)
 
-    # 1. Extract text from file
-    text = extract_text(file_path)
+        for index, chunk in enumerate(chunks):
+            embedding = embed_text(chunk)
+            insert_embedding(
+                document_id=file_id,
+                content=chunk,
+                embedding=embedding,
+                chunk_index=index
+            )
 
-    # 2. Split into chunks
-    chunks = chunk_text(text)
-
-    # 3. Process each chunk
-    for index, chunk in enumerate(chunks):
-        embedding = embed_text(chunk)
-
-        # 4. Store in database
-        insert_embedding(
-            document_id=file_id,
-            content=chunk,
-            embedding=embedding,
-            chunk_index=index
-        )
+        update_file_status(file_id, "done")
+    except Exception as e:
+        update_file_status(file_id, "failed")
+        raise e

@@ -87,4 +87,5 @@ async def upload(file: UploadFile = File(...)):
         }
 
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=500, detail=str(e))

@@ -51,8 +51,13 @@ def init_db():
             hashed_name TEXT NOT NULL UNIQUE,
             path TEXT NOT NULL,
             size BIGINT NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'processing',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
+        """)
+
+        cursor.execute("""
+        ALTER TABLE files ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'processing'
         """)
 
         cursor.execute("""
@@ -98,6 +103,27 @@ def insert_file(original_name: str, hashed_name: str, path: str, size: int = 0):
         return file_id
     except Exception as e:
         print(f"Insert error: {e}")
+    finally:
+        conn.close()
+
+
+# =========================
+# UPDATE FILE STATUS
+# =========================
+def update_file_status(file_id: int, status: str):
+    conn = create_connection()
+    if not conn:
+        return
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE files SET status = %s WHERE id = %s",
+            (status, file_id)
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"Update status error: {e}")
     finally:
         conn.close()
 

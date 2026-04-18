@@ -1,20 +1,13 @@
 <div class="page">
-  <header class="header">
-    <div class="header__top">
-      <div class="logo">
-        <span class="logo-icon">🔍</span>
-        <span class="logo-text">Local RAG Service</span>
-      </div>
-      <nav class="nav">
-        <a class="nav__link" routerLink="/">Upload</a>
-        <a class="nav__link nav__link--active" routerLink="/documents">Documents</a>
-        <a class="nav__link" routerLink="/search">Search</a>
-      </nav>
-    </div>
-    <p class="subtitle">Your indexed knowledge base</p>
-  </header>
 
-  <main class="main">
+  <div class="page-header">
+    <div class="page-header__left">
+      <h1 class="page-title">Documents</h1>
+      <span class="page-sub">Your indexed knowledge base</span>
+    </div>
+  </div>
+
+  <div class="page-body">
     <section class="docs-section">
       <h2 class="docs-title">
         Ready Documents
@@ -28,7 +21,7 @@
       } @else if (done().length === 0) {
         <div class="empty-state">
           <span style="font-size:2rem">📂</span>
-          <p>No indexed documents yet. Upload files on the Upload page.</p>
+          <p>No indexed documents yet. Upload files using the sidebar button.</p>
         </div>
       } @else {
         <div class="table-wrapper">
@@ -40,6 +33,7 @@
                 <th>Type</th>
                 <th>Size</th>
                 <th>Chunks</th>
+                <th>Ingestion time</th>
                 <th>Uploaded</th>
                 <th>Actions</th>
               </tr>
@@ -49,8 +43,10 @@
                 <tr>
                   <td class="doc-id">{{ doc.id }}</td>
                   <td class="doc-name">
-                    <span class="doc-icon">{{ getFileIcon(doc.original_name) }}</span>
-                    {{ doc.original_name }}
+                    <button class="doc-name-btn" (click)="openChunks(doc)">
+                      <span class="doc-icon">{{ getFileIcon(doc.original_name) }}</span>
+                      {{ doc.original_name }}
+                    </button>
                   </td>
                   <td>
                     <span class="badge"
@@ -61,6 +57,7 @@
                   </td>
                   <td class="doc-size">{{ formatSize(doc.size) }}</td>
                   <td class="doc-chunks">{{ doc.chunk_count }}</td>
+                  <td class="doc-duration">{{ ingestionDuration(doc) }}</td>
                   <td class="doc-date">{{ doc.created_at | date:'mediumDate' }}</td>
                   <td class="doc-actions">
                     @if (isPdf(doc.original_name)) {
@@ -89,7 +86,7 @@
         </div>
       }
     </section>
-  </main>
+  </div>
 </div>
 
 <!-- Delete Confirmation Modal -->
@@ -105,6 +102,38 @@
       <div class="confirm-actions">
         <button class="btn btn--ghost" (click)="cancelDelete()">Cancel</button>
         <button class="btn btn--danger-solid" (click)="deleteDocument()">Delete</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Chunks Modal -->
+@if (selectedDoc()) {
+  <div class="modal-backdrop" (click)="closeChunks()">
+    <div class="modal modal--chunks" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <span class="modal-title">
+          <span>{{ getFileIcon(selectedDoc()!.original_name) }}</span>
+          {{ selectedDoc()!.original_name }}
+          <span class="docs-count">{{ selectedDoc()!.chunk_count }} chunks</span>
+        </span>
+        <button class="modal-close" (click)="closeChunks()">✕</button>
+      </div>
+      <div class="chunks-body">
+        @if (loadingChunks()) {
+          <div class="loading"><span class="spinner"></span> Loading chunks…</div>
+        } @else if (chunks().length === 0) {
+          <div class="empty-state"><p>No chunks found.</p></div>
+        } @else {
+          <ul class="chunk-list">
+            @for (chunk of chunks(); track chunk.id) {
+              <li class="chunk-item">
+                <span class="chunk-index">#{{ chunk.chunk_index + 1 }}</span>
+                <p class="chunk-content">{{ chunk.content }}</p>
+              </li>
+            }
+          </ul>
+        }
       </div>
     </div>
   </div>

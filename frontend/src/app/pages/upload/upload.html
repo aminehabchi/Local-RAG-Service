@@ -1,18 +1,10 @@
 <div class="page">
-  <header class="header">
-    <div class="header__top">
-      <div class="logo">
-        <span class="logo-icon">🔍</span>
-        <span class="logo-text">Local RAG Service</span>
-      </div>
-      <nav class="nav">
-        <a class="nav__link nav__link--active" routerLink="/">Upload</a>
-        <a class="nav__link" routerLink="/documents">Documents</a>
-        <a class="nav__link" routerLink="/search">Search</a>
-      </nav>
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Upload</h1>
+      <span class="page-sub">Add PDF or TXT files to your knowledge base</span>
     </div>
-    <p class="subtitle">Upload PDF or TXT files to your knowledge base</p>
-  </header>
+  </div>
 
   <main class="main">
 
@@ -87,7 +79,17 @@
                 @if (item.phase === 'done')      { Done }
                 @if (item.phase === 'error')     { Failed }
               </span>
-              @if (item.phase === 'done' || item.phase === 'error') {
+              @if (item.phase === 'done') {
+                <button class="upload-item__delete" (click)="confirmDelete(item.id)" title="Delete file">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6l-1 14H6L5 6"/>
+                    <path d="M10 11v6M14 11v6"/>
+                    <path d="M9 6V4h6v2"/>
+                  </svg>
+                </button>
+              }
+              @if (item.phase === 'error') {
                 <button class="upload-item__dismiss" (click)="dismissItem(item.id)" title="Dismiss">✕</button>
               }
             </div>
@@ -137,6 +139,19 @@
 
   </main>
 </div>
+
+@if (pendingDeleteId()) {
+  <app-confirm-dialog
+    title="Delete file?"
+    message="This will permanently remove from the knowledge base:"
+    [highlight]="pendingDeleteName()"
+    confirmLabel="Delete"
+    cancelLabel="Cancel"
+    [danger]="true"
+    (confirmed)="executeDelete()"
+    (cancelled)="cancelDelete()"
+  />
+}
 
 <!-- PDF Viewer Modal -->
 @if (viewerUrl()) {

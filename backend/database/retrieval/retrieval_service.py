@@ -1,16 +1,12 @@
-# retrival service for the RAG system, responsible for fetching relevant documents based on user queries and providing them to the LLM for response generation.
-
 import ast
 import math
-from typing import List, Dict
-from fastembed import TextEmbedding
-from database.postgres_service import create_connection
-
-_embeddings = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+from typing import List, Dict, Optional
+from database.postgres_service import _get_conn, _put_conn
+from database.embeddings import get_embeddings_model
 
 
 def embed_query(text: str) -> List[float]:
-    return list(list(_embeddings.embed([text]))[0])
+    return list(list(get_embeddings_model().embed([text]))[0])
 
 
 def _cosine_similarity(a: List[float], b: List[float]) -> float:
@@ -22,19 +18,31 @@ def _cosine_similarity(a: List[float], b: List[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
-def search_similar(query_embedding: List[float], limit: int = 5) -> List[Dict]:
-    conn = create_connection()
-    if not conn:
-        return []
-
+def search_similar(
+    query_embedding: List[float],
+    limit: int = 5,
+    file_id: Optional[int] = None,
+) -> List[Dict]:
+    conn = _get_conn()
     try:
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT dc.id, dc.file_id, dc.chunk_index, dc.content, dc.embedding,
-                   f.original_name
-            FROM document_chunks dc
-            JOIN files f ON f.id = dc.file_id
-        """)
+
+        if file_id is not None:
+            cursor.execute("""
+                SELECT dc.id, dc.file_id, dc.chunk_index, dc.content, dc.embedding,
+                       f.original_name
+                FROM document_chunks dc
+                JOIN files f ON f.id = dc.file_id
+                WHERE dc.file_id = %s
+            """, (file_id,))
+        else:
+            cursor.execute("""
+                SELECT dc.id, dc.file_id, dc.chunk_index, dc.content, dc.embedding,
+                       f.original_name
+                FROM document_chunks dc
+                JOIN files f ON f.id = dc.file_id
+            """)
+
         rows = cursor.fetchall()
 
         scored = []
@@ -60,4 +68,4 @@ def search_similar(query_embedding: List[float], limit: int = 5) -> List[Dict]:
         print(f"Search error: {e}")
         return []
     finally:
-        conn.close()
+        _put_conn(conn)

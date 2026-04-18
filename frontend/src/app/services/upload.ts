@@ -11,6 +11,13 @@ export interface Document {
   status: string;
   chunk_count: number;
   created_at: string;
+  ingested_at: string | null;
+}
+
+export interface Chunk {
+  id: number;
+  chunk_index: number;
+  content: string;
 }
 
 export interface UploadResponse {
@@ -42,5 +49,9 @@ export class UploadService {
 
   deleteDocument(id: number): Observable<{ message: string }> {
     return this.http.delete<{ message: string }>(`${this.apiUrl}/documents/${id}`);
+  }
+
+  getDocumentChunks(id: number): Observable<Chunk[]> {
+    return this.http.get<Chunk[]>(`${this.apiUrl}/documents/${id}/chunks`);
   }
 }

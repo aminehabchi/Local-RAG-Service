@@ -1,0 +1,21 @@
+<div class="backdrop" (click)="cancelled.emit()">
+  <div class="dialog" (click)="$event.stopPropagation()">
+    <p class="dialog__title">{{ title() }}</p>
+    <p class="dialog__message">
+      {{ message() }}
+      @if (highlight()) {
+        <span class="dialog__highlight">{{ highlight() }}</span>
+      }
+    </p>
+    <div class="dialog__actions">
+      <button class="btn btn--ghost" (click)="cancelled.emit()">{{ cancelLabel() }}</button>
+      <button
+        class="btn"
+        [class.btn--danger-solid]="danger()"
+        [class.btn--primary]="!danger()"
+        (click)="confirmed.emit()">
+        {{ confirmLabel() }}
+      </button>
+    </div>
+  </div>
+</div>

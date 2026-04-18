@@ -17,7 +17,11 @@ export class SearchService {
 
   constructor(private http: HttpClient) {}
 
-  search(query: string, limit = 5): Observable<SearchResult[]> {
-    return this.http.post<SearchResult[]>(`${this.apiUrl}/search`, { query, limit });
+  search(query: string, limit = 5, fileId: number | null = null): Observable<SearchResult[]> {
+    return this.http.post<SearchResult[]>(`${this.apiUrl}/search`, {
+      query,
+      limit,
+      file_id: fileId,
+    });
   }
 }

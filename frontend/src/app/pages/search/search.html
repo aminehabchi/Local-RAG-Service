@@ -1,26 +1,17 @@
-<div class="page">
+<div class="search-page">
 
-  <!-- Header / Nav -->
-  <header class="header">
-    <div class="header__top">
-      <div class="logo">
-        <span class="logo-icon">🔍</span>
-        <span class="logo-text">Local RAG Service</span>
-      </div>
-      <nav class="nav">
-        <a class="nav__link" routerLink="/">Upload</a>
-        <a class="nav__link" routerLink="/documents">Documents</a>
-        <a class="nav__link nav__link--active" routerLink="/search">Search</a>
-      </nav>
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Search</h1>
+      <span class="page-sub">Search your knowledge base with natural language</span>
     </div>
-    <p class="subtitle">Search your knowledge base with natural language</p>
-  </header>
+  </div>
 
-  <main class="main">
+  <div class="page-body">
 
-    <!-- Search bar -->
-    <div class="search-wrap">
-      <div class="search-box" [class.search-box--focus]="status() === 'loading'">
+    <!-- Controls -->
+    <div class="controls">
+      <div class="search-box" [class.search-box--active]="status() === 'loading'">
         <svg class="search-box__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
         </svg>
@@ -35,52 +26,69 @@
           autofocus
         />
         @if (query) {
-          <button class="search-box__clear" (click)="clear()" title="Clear">✕</button>
+          <button class="search-box__clear" (click)="clear()">✕</button>
         }
       </div>
 
-      <div class="search-controls">
-        <label class="limit-label">
-          Top results
-          <select class="limit-select" [(ngModel)]="limit" [disabled]="status() === 'loading'">
+      <div class="filters">
+        <label class="filter-item">
+          <span class="filter-item__label">Document</span>
+          <select class="filter-select" [(ngModel)]="fileId" [disabled]="status() === 'loading'">
+            <option [ngValue]="null">All documents</option>
+            @for (doc of documents(); track doc.id) {
+              <option [ngValue]="doc.id">{{ doc.original_name }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="filter-item">
+          <span class="filter-item__label">Top results</span>
+          <select class="filter-select" [(ngModel)]="limit" [disabled]="status() === 'loading'">
             <option [value]="3">3</option>
             <option [value]="5">5</option>
             <option [value]="10">10</option>
             <option [value]="20">20</option>
           </select>
         </label>
-        <button class="btn btn--primary" (click)="submit()" [disabled]="!query.trim() || status() === 'loading'">
-          @if (status() === 'loading') { <span class="spinner spinner--sm"></span> Searching… }
-          @else { Search }
+
+        <button class="search-btn" (click)="submit()" [disabled]="!query.trim() || status() === 'loading'">
+          @if (status() === 'loading') {
+            <span class="spinner"></span> Searching…
+          } @else {
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            Search
+          }
         </button>
       </div>
     </div>
 
-    <!-- States -->
+    <!-- Error -->
     @if (status() === 'error') {
-      <div class="alert alert--error">
-        <span>✕</span> {{ error() }}
-      </div>
+      <div class="alert">✕ {{ error() }}</div>
     }
 
+    <!-- No results -->
     @if (status() === 'done' && results().length === 0) {
       <div class="empty-state">
-        <span style="font-size:2rem">🔎</span>
-        <p>No matching chunks found for <strong>"{{ query }}"</strong>.</p>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <p>No results for <strong>"{{ lastQuery }}"</strong></p>
       </div>
     }
 
     <!-- Results -->
     @if (results().length > 0) {
       <div class="results-header">
-        <span class="results-count">{{ results().length }} result{{ results().length > 1 ? 's' : '' }}</span>
-        <span class="results-query">for "<em>{{ query }}</em>"</span>
+        <span class="results-count">{{ results().length }} result{{ results().length !== 1 ? 's' : '' }}</span>
+        <span class="results-query">for "<em>{{ lastQuery }}</em>"</span>
       </div>
 
       <div class="results">
         @for (r of results(); track r.id; let i = $index) {
-          <div class="result-card" [style.animation-delay]="(i * 55) + 'ms'">
-
+          <div class="result-card" [style.animation-delay]="(i * 40) + 'ms'">
             <div class="result-card__head">
               <span class="result-card__file">
                 {{ getFileIcon(r.original_name) }} {{ r.original_name }}
@@ -90,24 +98,21 @@
                 {{ scoreLabel(r.score) }} · {{ (r.score * 100) | number:'1.0-0' }}%
               </span>
             </div>
-
             <div class="result-card__bar-wrap">
               <div class="result-card__bar" [class]="scoreClass(r.score)" [style.width.%]="r.score * 100"></div>
             </div>
-
             <p class="result-card__content">{{ r.content }}</p>
-
           </div>
         }
       </div>
     }
 
-    <!-- Idle hint -->
+    <!-- Idle -->
     @if (status() === 'idle') {
       <div class="idle-hint">
-        <p>Type a question or keyword and press <kbd>Enter</kbd> to search across all ingested documents.</p>
+        <p>Type a question or keyword and press <kbd>Enter</kbd> to search.</p>
       </div>
     }
 
-  </main>
+  </div>
 </div>

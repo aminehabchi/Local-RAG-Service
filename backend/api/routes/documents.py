@@ -4,9 +4,9 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 
-from database.postgres_service import get_all_files, get_file_by_id, insert_file, delete_file_db
+from database.postgres_service import get_all_files, get_file_by_id, insert_file, delete_file_db, get_chunks_by_file_id
 from storage.files_service import delete_file_fs, is_allowed_file, generate_filename, save_file_fs
-from ingestion.ingestion_service import ingest_and_store
+from database.ingestion.ingestion_service import ingest_and_store
 
 
 router = APIRouter()
@@ -18,6 +18,17 @@ router = APIRouter()
 @router.get("/documents")
 async def list_documents():
     return get_all_files()
+
+
+# =========================
+# GET DOCUMENT CHUNKS
+# =========================
+@router.get("/documents/{file_id}/chunks")
+async def get_document_chunks(file_id: int):
+    doc = get_file_by_id(file_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return get_chunks_by_file_id(file_id)
 
 
 # =========================

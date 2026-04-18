@@ -1,9 +1,10 @@
 import { Component, OnInit, OnDestroy, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { HttpEventType, HttpResponse } from '@angular/common/http';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { UploadService, Document } from '../../services/upload';
+import { ConfirmDialogComponent } from '../../components/confirm-dialog/confirm-dialog';
 
 type FilePhase = 'pending' | 'uploading' | 'ingesting' | 'done' | 'error';
 
@@ -24,17 +25,18 @@ function nextId(): string { return `f${Date.now()}-${_seq++}`; }
 
 @Component({
   selector: 'app-upload',
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, ConfirmDialogComponent],
   templateUrl: './upload.html',
   styleUrl: './upload.scss',
 })
 export class UploadPage implements OnInit, OnDestroy {
-  dragOver     = signal(false);
-  uploadQueue  = signal<FileUploadState[]>([]);
-  loadingDocs  = signal(false);
-  viewerUrl    = signal<SafeResourceUrl | null>(null);
-  viewerName   = signal('');
-  now          = signal(Date.now());
+  dragOver        = signal(false);
+  uploadQueue     = signal<FileUploadState[]>([]);
+  loadingDocs     = signal(false);
+  viewerUrl       = signal<SafeResourceUrl | null>(null);
+  viewerName      = signal('');
+  now             = signal(Date.now());
+  pendingDeleteId = signal<string | null>(null);
 
   hasQueue = computed(() => this.uploadQueue().length > 0);
   allDone  = computed(() =>
@@ -51,6 +53,7 @@ export class UploadPage implements OnInit, OnDestroy {
   constructor(
     private uploadService: UploadService,
     private sanitizer: DomSanitizer,
+    private router: Router,
   ) {}
 
   ngOnInit(): void {
@@ -161,6 +164,26 @@ export class UploadPage implements OnInit, OnDestroy {
     this.stopIngestTimer(id);
     this.fileIdMap.delete(id);
     this.uploadQueue.update(q => q.filter(f => f.id !== id));
+  }
+
+  confirmDelete(id: string): void { this.pendingDeleteId.set(id); }
+  cancelDelete(): void            { this.pendingDeleteId.set(null); }
+
+  executeDelete(): void {
+    const id = this.pendingDeleteId();
+    if (!id) return;
+    this.pendingDeleteId.set(null);
+    const fileId = this.fileIdMap.get(id);
+    if (!fileId) { this.dismissItem(id); return; }
+    this.uploadService.deleteDocument(fileId).subscribe({
+      next:  () => this.dismissItem(id),
+      error: () => this.dismissItem(id),
+    });
+  }
+
+  pendingDeleteName(): string {
+    const id = this.pendingDeleteId();
+    return id ? (this.uploadQueue().find(f => f.id === id)?.name ?? '') : '';
   }
 
   private startStatusPolling(): void {

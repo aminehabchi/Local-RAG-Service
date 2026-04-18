@@ -1,5 +1,7 @@
 import psycopg2
 import psycopg2.pool
+import numpy as np
+from pgvector.psycopg2 import register_vector
 from psycopg2.extras import RealDictCursor
 from typing import Optional, List, Dict, Tuple
 
@@ -38,8 +40,22 @@ def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
     return _pool
 
 
+_vector_ready = False
+
+
 def _get_conn():
-    return _get_pool().getconn()
+    global _vector_ready
+    conn = _get_pool().getconn()
+    if _vector_ready:
+        register_vector(conn)
+    return conn
+
+
+def _ensure_vector(conn) -> None:
+    """Call after the vector extension is confirmed to exist."""
+    global _vector_ready
+    register_vector(conn)
+    _vector_ready = True
 
 
 def _put_conn(conn) -> None:
@@ -78,16 +94,41 @@ def init_db():
         ALTER TABLE files ADD COLUMN IF NOT EXISTS ingested_at TIMESTAMP
         """)
 
+        cursor.execute("CREATE EXTENSION IF NOT EXISTS vector")
+        _ensure_vector(conn)
+
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS document_chunks (
             id SERIAL PRIMARY KEY,
             file_id INTEGER NOT NULL,
             chunk_index INTEGER NOT NULL,
             content TEXT NOT NULL,
-            embedding TEXT,
+            embedding vector(384),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (file_id) REFERENCES files (id) ON DELETE CASCADE
         )
+        """)
+
+        # Migrate existing TEXT column to vector(384)
+        cursor.execute("""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'document_chunks'
+                AND column_name = 'embedding'
+                AND data_type = 'text'
+            ) THEN
+                ALTER TABLE document_chunks
+                ALTER COLUMN embedding TYPE vector(384)
+                USING embedding::vector;
+            END IF;
+        END $$
+        """)
+
+        cursor.execute("""
+        CREATE INDEX IF NOT EXISTS document_chunks_embedding_hnsw
+        ON document_chunks USING hnsw (embedding vector_cosine_ops)
         """)
 
         cursor.execute("""
@@ -286,7 +327,7 @@ def batch_insert_embeddings(file_id: int, items: List[Tuple[int, str, List[float
         cursor.executemany("""
             INSERT INTO document_chunks (file_id, chunk_index, content, embedding)
             VALUES (%s, %s, %s, %s)
-        """, [(file_id, idx, content, str(emb)) for idx, content, emb in items])
+        """, [(file_id, idx, content, np.array(emb, dtype=np.float32)) for idx, content, emb in items])
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -306,7 +347,7 @@ def insert_embedding(document_id: int, content: str, embedding: List[float], chu
         cursor.execute("""
             INSERT INTO document_chunks (file_id, chunk_index, content, embedding)
             VALUES (%s, %s, %s, %s)
-        """, (document_id, chunk_index, content, str(embedding)))
+        """, (document_id, chunk_index, content, np.array(embedding, dtype=np.float32)))
         conn.commit()
     except Exception as e:
         conn.rollback()

@@ -1,7 +1,7 @@
 import { Component, OnInit, signal, ElementRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { SearchService, SearchResult } from '../../services/search';
+import { SearchService, SearchResult, SearchType } from '../../services/search';
 import { UploadService, Document } from '../../services/upload';
 
 type SearchStatus = 'idle' | 'loading' | 'done' | 'error';
@@ -15,14 +15,21 @@ type SearchStatus = 'idle' | 'loading' | 'done' | 'error';
 export class SearchPage implements OnInit {
   @ViewChild('queryInput') queryInput!: ElementRef<HTMLInputElement>;
 
-  query     = '';
-  lastQuery = '';
-  limit     = 5;
+  query      = '';
+  lastQuery  = '';
+  limit      = 5;
   fileId: number | null = null;
-  status    = signal<SearchStatus>('idle');
-  results   = signal<SearchResult[]>([]);
-  error     = signal('');
-  documents = signal<Document[]>([]);
+  searchType: SearchType = 'semantic';
+  status     = signal<SearchStatus>('idle');
+  results    = signal<SearchResult[]>([]);
+  error      = signal('');
+  documents  = signal<Document[]>([]);
+
+  readonly searchTypes: { value: SearchType; label: string; tip: string }[] = [
+    { value: 'semantic', label: 'Semantic', tip: 'Vector similarity — finds conceptually related content' },
+    { value: 'keyword',  label: 'Keyword',  tip: 'Full-text search — exact and stemmed word matching' },
+    { value: 'hybrid',   label: 'Hybrid',   tip: 'Combines semantic + keyword via Reciprocal Rank Fusion' },
+  ];
 
   constructor(
     private searchService: SearchService,
@@ -43,7 +50,7 @@ export class SearchPage implements OnInit {
     this.results.set([]);
     this.error.set('');
 
-    this.searchService.search(q, this.limit, this.fileId).subscribe({
+    this.searchService.search(q, this.limit, this.fileId, this.searchType).subscribe({
       next:  (res) => { this.results.set(res); this.status.set('done'); },
       error: (err) => {
         this.error.set(err.error?.detail ?? 'Search failed. Please try again.');

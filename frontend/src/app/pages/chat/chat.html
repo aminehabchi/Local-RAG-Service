@@ -1,0 +1,120 @@
+<div class="chat-page">
+
+  <!-- Header -->
+  <div class="page-header">
+    <div class="page-header__left">
+      <h1 class="page-title">Chat</h1>
+      <span class="page-sub">Ask questions about your documents</span>
+    </div>
+    <div class="page-header__controls">
+
+      <label class="filter-item">
+        <span class="filter-item__label">Model</span>
+        <select class="filter-select" [(ngModel)]="selectedModelId" [disabled]="loading()">
+          <option [ngValue]="null">Default</option>
+          @for (m of models(); track m.id) {
+            <option [ngValue]="m.id">{{ m.name }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="filter-item">
+        <span class="filter-item__label">Document</span>
+        <select class="filter-select" [(ngModel)]="fileId" [disabled]="loading()">
+          <option [ngValue]="null">All documents</option>
+          @for (doc of documents(); track doc.id) {
+            <option [ngValue]="doc.id">{{ doc.original_name }}</option>
+          }
+        </select>
+      </label>
+
+      @if (messages().length > 0) {
+        <button class="btn-clear" (click)="clearChat()" [disabled]="loading()">Clear</button>
+      }
+
+    </div>
+  </div>
+
+  <!-- Messages area -->
+  <div class="messages" #messagesEl>
+
+    @if (messages().length === 0) {
+      <div class="welcome">
+        <div class="welcome__icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>
+        <h2 class="welcome__title">Start a conversation</h2>
+        <p class="welcome__sub">Ask anything about your documents. The AI will retrieve relevant context to answer.</p>
+        @if (models().length === 0) {
+          <p class="welcome__warn">
+            ⚠ No models configured.
+            <a routerLink="/models">Add a model</a> first.
+          </p>
+        }
+      </div>
+    }
+
+    @for (msg of messages(); track $index) {
+      <div class="msg" [class.msg--user]="msg.role === 'user'" [class.msg--assistant]="msg.role === 'assistant'">
+
+        @if (msg.role === 'assistant') {
+          <div class="msg__avatar">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+            </svg>
+          </div>
+        }
+
+        <div class="msg__bubble">
+          @if (msg.loading) {
+            <div class="typing"><span></span><span></span><span></span></div>
+          } @else {
+            <p class="msg__text">{{ msg.content }}</p>
+          }
+
+          @if (msg.sources && msg.sources.length > 0) {
+            <div class="msg__sources">
+              <span class="sources__label">Sources</span>
+              @for (s of msg.sources; track s.id) {
+                <div class="source-chip">
+                  <span class="source-chip__name">{{ getFileIcon(s.original_name) }} {{ s.original_name }}</span>
+                  <span class="source-chip__score">{{ (s.score * 100) | number:'1.0-0' }}%</span>
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+      </div>
+    }
+
+  </div>
+
+  <!-- Input bar -->
+  <div class="input-bar">
+    <textarea
+      #inputEl
+      class="input-bar__textarea"
+      placeholder="Ask a question… (Enter to send, Shift+Enter for new line)"
+      [(ngModel)]="input"
+      (keydown)="onKeydown($event)"
+      (input)="autoResize()"
+      [disabled]="loading()"
+      rows="1"
+    ></textarea>
+    <button class="input-bar__send" (click)="send()" [disabled]="!input.trim() || loading()">
+      @if (loading()) {
+        <span class="spinner"></span>
+      } @else {
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="22" y1="2" x2="11" y2="13"/>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      }
+    </button>
+  </div>
+
+</div>

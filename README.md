@@ -1,285 +1,197 @@
 # Local RAG Service
 
-A fully local Retrieval-Augmented Generation (RAG) service that lets you upload documents and query them using natural language. No data leaves your machine — everything runs on your own hardware.
+A fully local Retrieval-Augmented Generation (RAG) system. Upload your documents, let the system index and embed them, then chat with your knowledge base — all running on your own machine with no data leaving your environment.
 
 ---
 
-## What it does
+## Technologies & Libraries Used
 
-You upload a document (PDF, DOCX, TXT). The service breaks it into chunks, converts each chunk into a vector embedding, and stores those vectors locally in Qdrant. When you ask a question, the same embedding model converts your question into a vector, finds the most semantically similar chunks, and feeds them as context to a local LLM (via Ollama) which generates a grounded answer with source citations.
+### Database
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![pgAdmin](https://img.shields.io/badge/pgAdmin-336791?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.pgadmin.org/)
+[![pgvector](https://img.shields.io/badge/pgvector-000000?style=for-the-badge&logo=postgresql&logoColor=white)](https://github.com/pgvector/pgvector)
+
+### Backend
+[![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Ollama](https://img.shields.io/badge/Ollama-000000?style=for-the-badge&logo=ollama&logoColor=white)](https://ollama.com/)
+[![NumPy](https://img.shields.io/badge/NumPy-013243?style=for-the-badge&logo=numpy&logoColor=white)](https://numpy.org/)
+
+### Frontend
+[![Angular](https://img.shields.io/badge/Angular_21-DD0031?style=for-the-badge&logo=angular&logoColor=white)](https://angular.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![RxJS](https://img.shields.io/badge/RxJS-B7178C?style=for-the-badge&logo=reactivex&logoColor=white)](https://rxjs.dev/)
+[![SCSS](https://img.shields.io/badge/SCSS-CC6699?style=for-the-badge&logo=sass&logoColor=white)](https://sass-lang.com/)
+
+---
+
+## Features
+
+- **Document ingestion** — upload PDF and text files; they are chunked, embedded, and stored in PostgreSQL
+- **Chat** — conversational interface backed by RAG; the LLM answers using retrieved context
+- **Search** — three search modes available:
+  - **Semantic** — vector cosine similarity via pgvector
+  - **Keyword** — PostgreSQL full-text search (`plainto_tsquery`)
+  - **Hybrid** — combines both using Reciprocal Rank Fusion (RRF)
+- **Model management** — add and switch between LLM backends (Ollama, OpenAI, Anthropic, custom OpenAI-compatible)
+- **Document viewer** — browse uploaded files and inspect their chunks
+- **Fully local** — no telemetry, no external APIs required (unless you configure OpenAI / Anthropic models)
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  UI Layer       Next.js / Streamlit / Gradio         │
-└────────────────────────┬────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────┐
-│  API Layer      FastAPI  +  Pydantic v2              │
-│                 POST /upload   POST /query            │
-└──────────┬─────────────────────────────┬────────────┘
-           │                             │
-┌──────────▼──────────┐   ┌─────────────▼────────────┐
-│  Ingestion Pipeline │   │  Query Pipeline           │
-│                     │   │                           │
-│  1. Parse file      │   │  1. Embed question        │
-│  2. Split chunks    │   │  2. Vector search         │
-│  3. Embed chunks    │   │  3. Filter by doc_id      │
-│  4. Upsert Qdrant   │   │  4. Build prompt          │
-│  5. Save metadata   │   │  5. LLM generates answer  │
-└──────────┬──────────┘   └─────────────┬────────────┘
-           │                             │
-┌──────────▼─────────────────────────────▼────────────┐
-│  Storage Layer                                       │
-│                                                      │
-│  Qdrant (vectors + payloads)                         │
-│  SQLite / SQLAlchemy (document metadata)             │
-│  Local filesystem  (original files)                  │
-└──────────────────────────────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────┐
-│  LLM Layer      Ollama  (Llama 3 / Mistral / Phi-3)  │
-│                 100% local — no API calls            │
-└─────────────────────────────────────────────────────┘
+┌─────────────────────┐        HTTP (port 8000)       ┌──────────────────────┐
+│   Angular Frontend  │ ◄────────────────────────────► │   FastAPI Backend    │
+│     (port 4200)     │                                │                      │
+└─────────────────────┘                                │  ┌────────────────┐  │
+                                                       │  │ Ingestion      │  │
+                                                       │  │ (PyMuPDF +     │  │
+                                                       │  │  fastembed)    │  │
+                                                       │  └───────┬────────┘  │
+                                                       │          │           │
+                                                       │  ┌───────▼────────┐  │
+                                                       │  │  PostgreSQL    │  │
+                                                       │  │  + pgvector    │  │
+                                                       │  └───────┬────────┘  │
+                                                       │          │           │
+                                                       │  ┌───────▼────────┐  │
+                                                       │  │ Retrieval      │  │
+                                                       │  │ (semantic /    │  │
+                                                       │  │  keyword /     │  │
+                                                       │  │  hybrid)       │  │
+                                                       │  └───────┬────────┘  │
+                                                       │          │           │
+                                                       │  ┌───────▼────────┐  │
+                                                       │  │ LLM Router     │  │
+                                                       │  │ (Ollama /      │  │
+                                                       │  │  OpenAI /      │  │
+                                                       │  │  Anthropic /   │  │
+                                                       │  │  Custom)       │  │
+                                                       │  └────────────────┘  │
+                                                       └──────────────────────┘
 ```
-
----
-
-## Tech Stack
-
-| Layer | Technology | Purpose |
-|---|---|---|
-| API | FastAPI | REST endpoints, file upload, SSE streaming |
-| Validation | Pydantic v2 | Request/response models |
-| Parsing | PyMuPDF, python-docx | Extract text from PDF, DOCX, TXT |
-| Chunking | LangChain `RecursiveCharacterTextSplitter` | Split text into overlapping passages |
-| Embedding | `sentence-transformers` (nomic-embed-text) | Convert text to vectors |
-| Vector DB | Qdrant | Store and search vectors |
-| Metadata DB | SQLite + SQLAlchemy | Track documents, status, chunk counts |
-| LLM runner | Ollama | Run local language models |
-| Models | Llama 3 / Mistral / Phi-3 | Generate answers from retrieved context |
-| UI | Streamlit (quick) or Next.js (production) | User interface |
 
 ---
 
 ## Project Structure
 
 ```
-rag-service/
-├── api/
-│   ├── main.py            # FastAPI app, route registration
-│   ├── routes/
-│   │   ├── upload.py      # POST /upload
-│   │   └── query.py       # POST /query
-│   └── models.py          # Pydantic request/response schemas
-│
-├── ingestion/
-│   ├── parser.py          # File → raw text (PDF, DOCX, TXT)
-│   ├── chunker.py         # Text → overlapping chunks
-│   └── embedder.py        # Chunks → vectors (sentence-transformers)
-│
-├── storage/
-│   ├── qdrant.py          # Qdrant client wrapper (upsert, search, delete)
-│   └── database.py        # SQLite models + SQLAlchemy session
-│
-├── retrieval/
-│   ├── search.py          # Query embedding + Qdrant search
-│   └── prompt.py          # Build augmented prompt from chunks
-│
-├── llm/
-│   └── ollama.py          # Ollama client, streaming response
-│
-├── data/
-│   ├── docs/              # Uploaded original files
-│   └── qdrant_data/       # Qdrant persistent storage
-│
-├── requirements.txt
-├── docker-compose.yml     # Qdrant + app services
-└── README.md
+Local-RAG-Service/
+├── backend/
+│   ├── main.py                         # FastAPI app entry point
+│   ├── requirements.txt
+│   ├── api/
+│   │   └── routes/
+│   │       ├── chat.py                 # POST /chat  — RAG + LLM
+│   │       ├── retrieval.py            # POST /search
+│   │       ├── documents.py            # CRUD /documents
+│   │       └── models.py               # CRUD /models
+│   ├── llm/                            # One service file per LLM provider
+│   │   ├── __init__.py                 # Re-exports all call() functions
+│   │   ├── ollama.py                   # Ollama  → /api/generate
+│   │   ├── openai.py                   # OpenAI  → /v1/chat/completions
+│   │   ├── anthropic.py                # Anthropic → /v1/messages
+│   │   └── custom.py                   # Custom OpenAI-compatible endpoint
+│   └── database/
+│       ├── postgres_service.py         # Connection pool, schema, queries
+│       ├── embeddings.py               # fastembed singleton (BAAI/bge-small-en-v1.5)
+│       ├── ingestion/
+│       │   └── ingestion_service.py    # PDF parsing + chunking + embedding
+│       └── retrieval/
+│           └── retrieval_service.py    # Semantic / keyword / hybrid search
+└── frontend/
+    └── src/app/
+        ├── pages/
+        │   ├── chat/                   # Chat page
+        │   ├── search/                 # Search page (3 modes)
+        │   ├── documents/              # Document list & viewer
+        │   ├── upload/                 # File upload with progress
+        │   └── models/                 # Model CRUD
+        └── services/
+            ├── chat.ts
+            ├── search.ts
+            ├── upload.ts
+            └── models.ts
 ```
 
 ---
 
-## Ingestion Pipeline
-
-When a user uploads a file, the following happens in order:
-
-1. **Receive** — FastAPI accepts the file via `POST /upload` (multipart/form-data)
-2. **Save to disk** — original file saved to `data/docs/{uuid}_{filename}`
-3. **Record metadata** — a row is written to SQLite with `status = "processing"`
-4. **Extract text** — file parsed into plain text using PyMuPDF or python-docx
-5. **Chunk** — text split into ~512-token passages with 50-token overlap
-6. **Embed** — each chunk passed through the embedding model → 768-dim vector
-7. **Upsert** — vectors + payload stored in Qdrant
-8. **Update status** — SQLite row updated to `status = "ready"`, `chunk_count = N`
-9. **Respond** — API returns `{ doc_id, chunks, status: "ready" }`
-
-Each Qdrant point stores:
-
-```python
-{
-  "id":          "uuid",
-  "vector":      [0.02, -0.81, ...],   # 768 floats
-  "payload": {
-    "text":        "The refund window is 30 days.",
-    "doc_id":      "abc-123",
-    "chunk_index": 4,
-    "filename":    "policy.pdf",
-    "page":        2,
-  }
-}
-```
-
----
-
-## Query Pipeline
-
-When a user submits a question:
-
-1. **Embed** the question using the same model used at ingestion time
-2. **Search** Qdrant for the top-5 most similar chunks (cosine similarity)
-3. **Filter** optionally restrict to a specific `doc_id`
-4. **Build prompt** — inject retrieved chunks as context into the LLM prompt
-5. **Generate** — Ollama streams the answer token by token
-6. **Return** — response includes the answer text + source citations
-
----
-
-## Qdrant Components
-
-| Component | What it is | Used for |
-|---|---|---|
-| `QdrantClient` | Connection object | All operations go through this |
-| `Collection` | Named vector bucket | One collection called `"documents"` |
-| `PointStruct` | Single stored item | One chunk = one point |
-| `payload` | Metadata dict on each point | Stores text, doc_id, filename, page |
-| `upsert()` | Insert or update points | Storing chunks after ingestion |
-| `search()` | Find similar vectors | Finding relevant chunks at query time |
-| `Filter` | Narrow search scope | Search within one document only |
-| `delete()` | Remove points | Clean up when a document is deleted |
-
----
-
-## Installation
+## Getting Started
 
 ### Prerequisites
 
-- Python 3.11+
-- Docker (for Qdrant)
-- [Ollama](https://ollama.com) installed and running
+| Requirement | Version |
+|---|---|
+| Python | 3.11+ |
+| Node.js | 20+ |
+| PostgreSQL | 15+ with pgvector extension |
+| Ollama *(optional)* | latest |
 
-### 1. Clone and install
+### 1 — PostgreSQL setup
+
+```sql
+CREATE DATABASE rag_db;
+-- Connect to rag_db, then:
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+### 2 — Backend
 
 ```bash
-git clone https://github.com/yourname/rag-service
-cd rag-service
+cd backend
+python -m venv rag-env
+source rag-env/bin/activate        # Windows: rag-env\Scripts\activate
 pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
 ```
 
-### 2. Start Qdrant
+### 3 — Frontend
 
 ```bash
-docker run -d -p 6333:6333 -v ./data/qdrant_data:/qdrant/storage qdrant/qdrant
+cd frontend
+npm install
+ng serve                            # opens http://localhost:4200
 ```
 
-### 3. Pull a local model
+### 4 — Add a model
 
-```bash
-ollama pull llama3
-# or: ollama pull mistral
-# or: ollama pull phi3
-```
+1. Open **http://localhost:4200**
+2. Go to **Models** in the sidebar
+3. Click **Add Model** and fill in the details:
 
-### 4. Run the API
+| Type | Name field | Base URL | API Key |
+|---|---|---|---|
+| Ollama | `llama3.2` | `http://localhost:11434` | — |
+| OpenAI | `gpt-4o` | — | your key |
+| Anthropic | `claude-3-5-sonnet-20241022` | — | your key |
+| Custom | model name | endpoint URL | if required |
 
-```bash
-uvicorn api.main:app --reload --port 8000
-```
-
-### 5. Open the UI
-
-```bash
-streamlit run ui/app.py
-```
+4. Click the ★ to set a default, then open **Chat** and start talking.
 
 ---
 
-## Requirements
+## Embedding Model
 
-```
-fastapi
-uvicorn
-python-multipart
-langchain
-langchain-community
-sentence-transformers
-qdrant-client
-sqlalchemy
-ollama
-pymupdf
-python-docx
-streamlit
-```
-
----
-
-## Key Design Decisions
-
-**Why Qdrant over Chroma?** Qdrant runs as a persistent Docker container, supports payload filtering, and is production-ready. Chroma is simpler to start but harder to scale.
-
-**Why the same embedding model for ingestion and query?** Each model defines its own vector space. Using different models at ingestion vs query time produces incompatible vectors — similarity scores become meaningless.
-
-**Why store `text` in the Qdrant payload?** So the query pipeline never needs to touch disk. The retrieved chunk text travels with the vector and is immediately available to inject into the LLM prompt.
-
-**Why keep original files on disk?** So you can re-process them if you change chunking strategy, swap embedding models, or want to extract additional metadata later.
-
-**Why SQLite alongside Qdrant?** Qdrant stores vectors and their payloads but isn't suited for relational queries like "list all documents uploaded today" or "show documents with status=processing". SQLite handles that cleanly.
+Documents are embedded with **[BAAI/bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5)** via `fastembed` (384-dimensional vectors). The model is downloaded automatically on first run and cached locally.
 
 ---
 
 ## API Reference
 
-### `POST /upload`
-
-Upload a document for ingestion.
-
-**Request:** `multipart/form-data` with file field
-
-**Response:**
-```json
-{
-  "doc_id": "abc-123",
-  "filename": "policy.pdf",
-  "chunk_count": 40,
-  "status": "ready"
-}
-```
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/upload` | Upload and ingest a document |
+| `GET` | `/documents` | List all documents |
+| `DELETE` | `/documents/{id}` | Delete a document and its chunks |
+| `POST` | `/search` | Search chunks (semantic / keyword / hybrid) |
+| `POST` | `/chat` | RAG chat with an LLM |
+| `GET` | `/models` | List configured models |
+| `POST` | `/models` | Add a model |
+| `PUT` | `/models/{id}` | Update a model |
+| `PATCH` | `/models/{id}/default` | Set default model |
+| `DELETE` | `/models/{id}` | Delete a model |
 
 ---
-
-### `POST /query`
-
-Ask a question against the stored documents.
-
-**Request:**
-```json
-{
-  "question": "What is the refund policy?",
-  "doc_id": "abc-123",
-  "top_k": 5
-}
-```
-
-**Response:**
-```json
-{
-  "answer": "Refunds are accepted within 30 days of purchase...",
-  "sources": [
-    { "filename": "policy.pdf", "page": 2, "chunk_index": 4, "score": 0.91 }
-  ]
-}
-```
 

@@ -30,6 +30,19 @@
         }
       </div>
 
+      <!-- Search type toggle -->
+      <div class="type-toggle">
+        @for (t of searchTypes; track t.value) {
+          <button
+            class="type-btn"
+            [class.type-btn--active]="searchType === t.value"
+            [title]="t.tip"
+            (click)="searchType = t.value"
+            [disabled]="status() === 'loading'"
+          >{{ t.label }}</button>
+        }
+      </div>
+
       <div class="filters">
         <label class="filter-item">
           <span class="filter-item__label">Document</span>
@@ -84,6 +97,7 @@
       <div class="results-header">
         <span class="results-count">{{ results().length }} result{{ results().length !== 1 ? 's' : '' }}</span>
         <span class="results-query">for "<em>{{ lastQuery }}</em>"</span>
+        <span class="results-mode">{{ searchType }}</span>
       </div>
 
       <div class="results">

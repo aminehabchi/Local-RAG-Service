@@ -61,6 +61,10 @@ def init_db():
         """)
 
         cursor.execute("""
+        ALTER TABLE files ADD COLUMN IF NOT EXISTS chunk_count INTEGER NOT NULL DEFAULT 0
+        """)
+
+        cursor.execute("""
         CREATE TABLE IF NOT EXISTS document_chunks (
             id SERIAL PRIMARY KEY,
             file_id INTEGER NOT NULL,
@@ -129,6 +133,27 @@ def update_file_status(file_id: int, status: str):
 
 
 # =========================
+# UPDATE CHUNK COUNT
+# =========================
+def update_file_chunk_count(file_id: int, count: int):
+    conn = create_connection()
+    if not conn:
+        return
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE files SET chunk_count = %s WHERE id = %s",
+            (count, file_id)
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"Update chunk count error: {e}")
+    finally:
+        conn.close()
+
+
+# =========================
 # INSERT EMBEDDING
 # =========================
 def insert_embedding(document_id: int, content: str, embedding: List[float], chunk_index: int = 0):
@@ -163,12 +188,9 @@ def get_all_files() -> List[Dict]:
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT f.id, f.original_name, f.hashed_name, f.path, f.size, f.created_at,
-                   COUNT(dc.id) AS chunk_count
-            FROM files f
-            LEFT JOIN document_chunks dc ON dc.file_id = f.id
-            GROUP BY f.id
-            ORDER BY f.id DESC
+            SELECT id, original_name, hashed_name, path, size, status, chunk_count, created_at
+            FROM files
+            ORDER BY id DESC
         """)
 
         return cursor.fetchall()

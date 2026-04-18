@@ -1,7 +1,7 @@
 import mimetypes
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 
 from database.postgres_service import get_all_files, get_file_by_id, insert_file, delete_file_db
@@ -16,7 +16,7 @@ router = APIRouter()
 # GET ALL DOCUMENTS
 # =========================
 @router.get("/documents")
-def list_documents():
+async def list_documents():
     return get_all_files()
 
 
@@ -24,7 +24,7 @@ def list_documents():
 # VIEW DOCUMENT
 # =========================
 @router.get("/documents/{file_id}/view")
-def view_document(file_id: int):
+async def view_document(file_id: int):
     doc = get_file_by_id(file_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -42,7 +42,7 @@ def view_document(file_id: int):
 # DELETE DOCUMENT
 # =========================
 @router.delete("/documents/{file_id}")
-def delete_document(file_id: int):
+async def delete_document(file_id: int):
     doc = get_file_by_id(file_id)
 
     if not doc:
@@ -58,7 +58,7 @@ def delete_document(file_id: int):
 # UPLOAD FILE
 # =========================
 @router.post("/upload")
-async def upload(file: UploadFile = File(...)):
+async def upload(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     try:
         if not is_allowed_file(file.filename):
             raise HTTPException(
@@ -77,10 +77,11 @@ async def upload(file: UploadFile = File(...)):
             size=file_size
         )
 
-        ingest_and_store(file_path, file_id)
+        background_tasks.add_task(ingest_and_store, file_path, file_id)
 
         return {
             "message": "file uploaded successfully",
+            "file_id": file_id,
             "original_name": file.filename,
             "hashed_name": hashed_name,
             "path": file_path

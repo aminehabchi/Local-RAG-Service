@@ -3,14 +3,14 @@
 import ast
 import math
 from typing import List, Dict
-from langchain_ollama import OllamaEmbeddings
+from fastembed import TextEmbedding
 from database.postgres_service import create_connection
 
-_embeddings = OllamaEmbeddings(model="nomic-embed-text")
+_embeddings = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
 
 
 def embed_query(text: str) -> List[float]:
-    return _embeddings.embed_query(text)
+    return list(list(_embeddings.embed([text]))[0])
 
 
 def _cosine_similarity(a: List[float], b: List[float]) -> float:
@@ -47,7 +47,7 @@ def search_similar(query_embedding: List[float], limit: int = 5) -> List[Dict]:
                     "file_id": row["file_id"],
                     "chunk_index": row["chunk_index"],
                     "content": row["content"],
-                    "score": score,
+                    "score": float(score),
                     "original_name": row["original_name"],
                 })
             except Exception:

@@ -1,0 +1,128 @@
+<div class="page">
+  <header class="header">
+    <div class="header__top">
+      <div class="logo">
+        <span class="logo-icon">🔍</span>
+        <span class="logo-text">Local RAG Service</span>
+      </div>
+      <nav class="nav">
+        <a class="nav__link" routerLink="/">Upload</a>
+        <a class="nav__link nav__link--active" routerLink="/documents">Documents</a>
+        <a class="nav__link" routerLink="/search">Search</a>
+      </nav>
+    </div>
+    <p class="subtitle">Your indexed knowledge base</p>
+  </header>
+
+  <main class="main">
+    <section class="docs-section">
+      <h2 class="docs-title">
+        Ready Documents
+        <span class="docs-count">{{ done().length }}</span>
+      </h2>
+
+      @if (loadingDocs()) {
+        <div class="loading">
+          <span class="spinner"></span> Loading documents…
+        </div>
+      } @else if (done().length === 0) {
+        <div class="empty-state">
+          <span style="font-size:2rem">📂</span>
+          <p>No indexed documents yet. Upload files on the Upload page.</p>
+        </div>
+      } @else {
+        <div class="table-wrapper">
+          <table class="docs-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>File name</th>
+                <th>Type</th>
+                <th>Size</th>
+                <th>Chunks</th>
+                <th>Uploaded</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (doc of done(); track doc.id) {
+                <tr>
+                  <td class="doc-id">{{ doc.id }}</td>
+                  <td class="doc-name">
+                    <span class="doc-icon">{{ getFileIcon(doc.original_name) }}</span>
+                    {{ doc.original_name }}
+                  </td>
+                  <td>
+                    <span class="badge"
+                      [class.badge--pdf]="isPdf(doc.original_name)"
+                      [class.badge--txt]="!isPdf(doc.original_name)">
+                      {{ isPdf(doc.original_name) ? 'PDF' : 'TXT' }}
+                    </span>
+                  </td>
+                  <td class="doc-size">{{ formatSize(doc.size) }}</td>
+                  <td class="doc-chunks">{{ doc.chunk_count }}</td>
+                  <td class="doc-date">{{ doc.created_at | date:'mediumDate' }}</td>
+                  <td class="doc-actions">
+                    @if (isPdf(doc.original_name)) {
+                      <button class="btn btn--view btn--sm" (click)="viewDocument(doc)">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                          <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                        View
+                      </button>
+                    }
+                    <button class="btn btn--danger btn--sm" (click)="confirmDelete(doc)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6l-1 14H6L5 6"/>
+                        <path d="M10 11v6M14 11v6"/>
+                        <path d="M9 6V4h6v2"/>
+                      </svg>
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  </main>
+</div>
+
+<!-- Delete Confirmation Modal -->
+@if (pendingDelete()) {
+  <div class="modal-backdrop" (click)="cancelDelete()">
+    <div class="modal modal--confirm" (click)="$event.stopPropagation()">
+      <div class="confirm-icon">🗑️</div>
+      <h3 class="confirm-title">Delete file?</h3>
+      <p class="confirm-msg">
+        <span class="confirm-filename">{{ pendingDelete()!.original_name }}</span>
+        will be permanently removed from the knowledge base.
+      </p>
+      <div class="confirm-actions">
+        <button class="btn btn--ghost" (click)="cancelDelete()">Cancel</button>
+        <button class="btn btn--danger-solid" (click)="deleteDocument()">Delete</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- PDF Viewer Modal -->
+@if (viewerUrl()) {
+  <div class="modal-backdrop" (click)="closeViewer()">
+    <div class="modal modal--pdf" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <span class="modal-title">
+          <span>📄</span> {{ viewerName() }}
+        </span>
+        <button class="modal-close" (click)="closeViewer()">✕</button>
+      </div>
+      <div class="modal-body">
+        <iframe [src]="viewerUrl()" class="pdf-iframe" title="PDF Viewer"></iframe>
+      </div>
+    </div>
+  </div>
+}

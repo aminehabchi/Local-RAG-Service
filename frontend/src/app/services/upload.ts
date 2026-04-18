@@ -8,12 +8,14 @@ export interface Document {
   hashed_name: string;
   path: string;
   size: number;
+  status: string;
   chunk_count: number;
   created_at: string;
 }
 
 export interface UploadResponse {
   message: string;
+  file_id: number;
   original_name: string;
   hashed_name: string;
   path: string;

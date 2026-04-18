@@ -3,4 +3,4 @@ uvicorn
 python-multipart
 psycopg2-binary
 pymupdf
-langchain-ollama
+fastembed

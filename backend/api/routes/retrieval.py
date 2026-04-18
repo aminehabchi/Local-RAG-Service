@@ -17,7 +17,7 @@ class SearchRequest(BaseModel):
 # SEARCH SIMILAR CHUNKS
 # =========================
 @router.post("/search")
-def search(request: SearchRequest) -> List[Dict]:
+async def search(request: SearchRequest) -> List[Dict]:
     try:
         query_embedding = embed_query(request.query)
         results = search_similar(query_embedding, limit=request.limit)

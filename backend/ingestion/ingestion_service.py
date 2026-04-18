@@ -1,9 +1,23 @@
-from typing import List, Dict
-from langchain_ollama import OllamaEmbeddings
+from typing import List
+from fastembed import TextEmbedding
 from ingestion.ingestion_utils import extract_text
-from database.postgres_service import insert_embedding, update_file_status
+from database.postgres_service import create_connection, update_file_status, update_file_chunk_count
+import re
 
-_embeddings = OllamaEmbeddings(model="nomic-embed-text")
+_embeddings = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+
+
+def clean_text(text: str) -> str:
+    if not text:
+        return ""
+
+    text = re.sub(r'\n+', '\n', text)
+    text = text.replace('\n', ' ')
+    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'[^\w\s.,!?;:%()\-\']', '', text)
+
+    return text.strip()
+
 
 def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> List[str]:
     chunks = []
@@ -11,54 +25,49 @@ def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> List[str]
 
     while start < len(text):
         end = start + chunk_size
-        chunks.append(text[start:end])
+        chunk = text[start:end]
+
+        if len(chunk.strip()) > 30:
+            chunks.append(chunk)
+
         start += chunk_size - overlap
 
     return chunks
 
 
-def embed_text(text: str) -> List[float]:
-    return _embeddings.embed_documents([text])[0]
-
-
-def process_document(file_path: str) -> List[Dict]:
-    """
-    Full ingestion pipeline:
-    file → text → chunks → embeddings
-    """
-
-    # 1. Extract text
-    text = extract_text(file_path)
-
-    # 2. Split into chunks
-    chunks = chunk_text(text)
-
-    # 3. Generate embeddings
-    result = []
-
-    for chunk in chunks:
-        result.append({
-            "content": chunk,
-            "embedding": embed_text(chunk)
-        })
-
-    return result
-
 def ingest_and_store(file_path: str, file_id: int) -> None:
     try:
         text = extract_text(file_path)
-        chunks = chunk_text(text)
+        text = clean_text(text)
 
+        chunks = chunk_text(text)
+        update_file_chunk_count(file_id, len(chunks))
+
+        conn = create_connection()
+        if not conn:
+            raise RuntimeError("Failed to connect to database")
+
+        cursor = conn.cursor()
+        print(f"Extracted {len(chunks)} chunks from document {file_id}")
         for index, chunk in enumerate(chunks):
-            embedding = embed_text(chunk)
-            insert_embedding(
-                document_id=file_id,
-                content=chunk,
-                embedding=embedding,
-                chunk_index=index
+            print(index)
+            clean_chunk = clean_text(chunk)
+
+            embedding = list(_embeddings.embed([clean_chunk]))[0].tolist()
+
+            cursor.execute(
+                """
+                INSERT INTO document_chunks (file_id, content, embedding, chunk_index)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (file_id, clean_chunk, str(embedding), index)
             )
 
+        conn.commit()
+        conn.close()
+
         update_file_status(file_id, "done")
+
     except Exception as e:
         update_file_status(file_id, "failed")
         raise e

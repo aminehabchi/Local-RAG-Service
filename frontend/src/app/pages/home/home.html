@@ -1,0 +1,137 @@
+<div class="home">
+  <div class="home__inner">
+
+    <!-- ── Hero ── -->
+    <section class="hero">
+      <div class="hero__badge">Open Source · Fully Local · No Telemetry</div>
+      <h1 class="hero__title">Local RAG Service</h1>
+      <p class="hero__sub">
+        A self-hosted Retrieval-Augmented Generation system. Upload your documents,
+        ask questions in natural language, and get answers grounded in your own knowledge base —
+        everything runs on your machine.
+      </p>
+      <div class="hero__actions">
+        <a class="btn btn--primary" routerLink="/chat">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          Start chatting
+        </a>
+        <a class="btn btn--ghost" routerLink="/upload">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+          </svg>
+          Upload documents
+        </a>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ── Features ── -->
+    <section class="section">
+      <h2 class="section__title">Features</h2>
+      <p class="section__sub">Everything you need to build a private, local AI knowledge base.</p>
+      <div class="features">
+        @for (f of features; track f.title) {
+          <a class="feature-card" [routerLink]="f.link">
+            <div class="feature-card__icon" [innerHTML]="f.icon"></div>
+            <div class="feature-card__body">
+              <h3 class="feature-card__title">{{ f.title }}</h3>
+              <p class="feature-card__desc">{{ f.desc }}</p>
+            </div>
+            <span class="feature-card__cta">
+              {{ f.label }}
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+            </span>
+          </a>
+        }
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ── How it works ── -->
+    <section class="section">
+      <h2 class="section__title">How it works</h2>
+      <p class="section__sub">RAG in three stages — ingest, retrieve, generate.</p>
+      <div class="pipeline">
+        <div class="pipeline__step">
+          <div class="pipeline__icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+              <path d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+            </svg>
+          </div>
+          <div>
+            <h4 class="pipeline__label">Ingest</h4>
+            <p class="pipeline__text">PDF / TXT → chunked → embedded with <code>BAAI/bge-small-en-v1.5</code> (384d) → stored in PostgreSQL + pgvector</p>
+          </div>
+        </div>
+        <div class="pipeline__arrow">→</div>
+        <div class="pipeline__step">
+          <div class="pipeline__icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+          </div>
+          <div>
+            <h4 class="pipeline__label">Retrieve</h4>
+            <p class="pipeline__text">Query embedded → cosine similarity via <code>&lt;=&gt;</code> operator or full-text search or hybrid RRF</p>
+          </div>
+        </div>
+        <div class="pipeline__arrow">→</div>
+        <div class="pipeline__step">
+          <div class="pipeline__icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          </div>
+          <div>
+            <h4 class="pipeline__label">Generate</h4>
+            <p class="pipeline__text">Top-k chunks injected as context → LLM (Ollama / OpenAI / Anthropic / Custom) answers grounded in your data</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ── Quick start ── -->
+    <section class="section">
+      <h2 class="section__title">Quick start</h2>
+      <p class="section__sub">Up and running in under five minutes.</p>
+      <ol class="steps">
+        @for (s of steps; track s.n) {
+          <li class="step">
+            <span class="step__n">{{ s.n }}</span>
+            <div class="step__body">
+              <h4 class="step__title">{{ s.title }}</h4>
+              <p class="step__desc">{{ s.body }}</p>
+            </div>
+          </li>
+        }
+      </ol>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ── Stack ── -->
+    <section class="section">
+      <h2 class="section__title">Tech stack</h2>
+      <div class="stack">
+        @for (s of stack; track s.label) {
+          <span class="stack__pill" [style.borderColor]="s.color + '40'" [style.color]="s.color">
+            {{ s.label }}
+          </span>
+        }
+      </div>
+    </section>
+
+    <footer class="footer">
+      Built for local, private AI. No data leaves your machine unless you configure an external API model.
+    </footer>
+
+  </div>
+</div>

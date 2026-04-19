@@ -94,6 +94,10 @@ def init_db():
         ALTER TABLE files ADD COLUMN IF NOT EXISTS ingested_at TIMESTAMP
         """)
 
+        cursor.execute("""
+        ALTER TABLE files ADD COLUMN IF NOT EXISTS start_at TIMESTAMP
+        """)
+
         cursor.execute("CREATE EXTENSION IF NOT EXISTS vector")
         _ensure_vector(conn)
 
@@ -250,6 +254,24 @@ def delete_model(model_id: int):
 
 
 # =========================
+# MARK STALE PROCESSING FILES AS FAILED
+# =========================
+def fail_processing_files():
+    conn = _get_conn()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE files SET status = 'failed' WHERE status = 'processing'"
+        )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Fail processing files error: {e}")
+    finally:
+        _put_conn(conn)
+
+
+# =========================
 # INSERT FILE
 # =========================
 def insert_file(original_name: str, hashed_name: str, path: str, size: int = 0):
@@ -281,6 +303,11 @@ def update_file_status(file_id: int, status: str):
         if status == "ready":
             cursor.execute(
                 "UPDATE files SET status = %s, ingested_at = NOW() WHERE id = %s",
+                (status, file_id)
+            )
+        elif status == "processing":
+            cursor.execute(
+                "UPDATE files SET status = %s, start_at = NOW() WHERE id = %s",
                 (status, file_id)
             )
         else:
@@ -364,7 +391,7 @@ def get_all_files() -> List[Dict]:
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, original_name, hashed_name, path, size, status, chunk_count, created_at, ingested_at
+            SELECT id, original_name, hashed_name, path, size, status, chunk_count, created_at, start_at, ingested_at
             FROM files
             ORDER BY id DESC
         """)
@@ -372,6 +399,43 @@ def get_all_files() -> List[Dict]:
     except Exception as e:
         print(f"Get all error: {e}")
         return []
+    finally:
+        _put_conn(conn)
+
+
+# =========================
+# DELETE CHUNKS BY FILE ID
+# =========================
+def delete_chunks_by_file_id(file_id: int) -> None:
+    conn = _get_conn()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM document_chunks WHERE file_id = %s", (file_id,))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Delete chunks error: {e}")
+    finally:
+        _put_conn(conn)
+
+
+# =========================
+# RESET FILE FOR REINDEX
+# =========================
+def reset_file_for_reindex(file_id: int) -> None:
+    conn = _get_conn()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM document_chunks WHERE file_id = %s", (file_id,))
+        cursor.execute("""
+            UPDATE files
+            SET status = 'processing', chunk_count = 0, start_at = NOW(), ingested_at = NULL
+            WHERE id = %s
+        """, (file_id,))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Reset for reindex error: {e}")
     finally:
         _put_conn(conn)
 

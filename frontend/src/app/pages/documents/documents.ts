@@ -10,16 +10,19 @@ import { UploadService, Document, Chunk } from '../../services/upload';
   styleUrl: './documents.scss',
 })
 export class DocumentsPage implements OnInit {
-  documents     = signal<Document[]>([]);
-  loadingDocs   = signal(false);
-  viewerUrl     = signal<SafeResourceUrl | null>(null);
-  viewerName    = signal('');
-  pendingDelete = signal<Document | null>(null);
-  selectedDoc   = signal<Document | null>(null);
-  chunks        = signal<Chunk[]>([]);
-  loadingChunks = signal(false);
+  documents      = signal<Document[]>([]);
+  loadingDocs    = signal(false);
+  viewerUrl      = signal<SafeResourceUrl | null>(null);
+  viewerName     = signal('');
+  pendingDelete  = signal<Document | null>(null);
+  pendingReindex = signal<Document | null>(null);
+  reindexingIds  = signal<Set<number>>(new Set());
+  selectedDoc    = signal<Document | null>(null);
+  chunks         = signal<Chunk[]>([]);
+  loadingChunks  = signal(false);
 
-  done = computed(() => this.documents().filter(d => d.status === 'ready'));
+  done   = computed(() => this.documents().filter(d => d.status === 'ready'));
+  failed = computed(() => this.documents().filter(d => d.status === 'failed'));
 
   constructor(
     private uploadService: UploadService,
@@ -56,8 +59,8 @@ export class DocumentsPage implements OnInit {
 
   closeViewer(): void { this.viewerUrl.set(null); this.viewerName.set(''); }
 
-  confirmDelete(doc: Document): void { this.pendingDelete.set(doc); }
-  cancelDelete(): void               { this.pendingDelete.set(null); }
+  confirmDelete(doc: Document): void  { this.pendingDelete.set(doc); }
+  cancelDelete(): void                { this.pendingDelete.set(null); }
 
   deleteDocument(): void {
     const doc = this.pendingDelete();
@@ -72,9 +75,35 @@ export class DocumentsPage implements OnInit {
     });
   }
 
+  confirmReindex(doc: Document): void { this.pendingReindex.set(doc); }
+  cancelReindex(): void               { this.pendingReindex.set(null); }
+
+  reindexDocument(): void {
+    const doc = this.pendingReindex();
+    if (!doc) return;
+    this.pendingReindex.set(null);
+
+    this.reindexingIds.update(ids => new Set([...ids, doc.id]));
+    this.documents.update(docs =>
+      docs.map(d => d.id === doc.id ? { ...d, status: 'processing', chunk_count: 0, ingested_at: null, start_at: null } : d)
+    );
+
+    this.uploadService.reindexDocument(doc.id).subscribe({
+      next: () => {
+        this.reindexingIds.update(ids => { const s = new Set(ids); s.delete(doc.id); return s; });
+        this.loadDocuments();
+      },
+      error: () => {
+        this.reindexingIds.update(ids => { const s = new Set(ids); s.delete(doc.id); return s; });
+      },
+    });
+  }
+
+  isReindexing(id: number): boolean { return this.reindexingIds().has(id); }
+
   ingestionDuration(doc: Document): string {
-    if (!doc.ingested_at || !doc.created_at) return '—';
-    const ms = new Date(doc.ingested_at + 'Z').getTime() - new Date(doc.created_at + 'Z').getTime();
+    if (!doc.ingested_at || !doc.start_at) return '—';
+    const ms = new Date(doc.ingested_at + 'Z').getTime() - new Date(doc.start_at + 'Z').getTime();
     if (ms < 0) return '—';
     const s = Math.round(ms / 1000);
     if (s < 60) return `${s}s`;

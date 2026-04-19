@@ -1,10 +1,11 @@
+import asyncio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 
 from database.retrieval.retrieval_service import embed_query, search_similar
 from database.postgres_service import get_model_by_id, get_all_models
-from llm import call_ollama, call_openai, call_anthropic, call_custom
+from llm import call_ollama, call_openai, call_anthropic, call_custom, call_gemini
 
 router = APIRouter()
 
@@ -32,9 +33,12 @@ async def chat(request: ChatRequest) -> Dict:
     if not last_user:
         raise HTTPException(status_code=400, detail="No user message found")
 
-    # Retrieve context
-    query_embedding = embed_query(last_user)
-    sources = search_similar(query_embedding, limit=request.limit, file_id=request.file_id)
+    # Retrieve context (blocking calls run in thread pool to avoid blocking the event loop)
+    loop = asyncio.get_event_loop()
+    query_embedding = await loop.run_in_executor(None, embed_query, last_user)
+    sources = await loop.run_in_executor(
+        None, search_similar, query_embedding, request.limit, request.file_id
+    )
 
     # Resolve model
     model = get_model_by_id(request.model_id) if request.model_id else None
@@ -73,6 +77,8 @@ async def chat(request: ChatRequest) -> Dict:
             answer = await call_openai(name, key, messages)
         elif t == "anthropic":
             answer = await call_anthropic(name, key, messages)
+        elif t == "gemini":
+            answer = await call_gemini(name, key, messages)
         elif t == "custom":
             answer = await call_custom(name, key, url, messages)
         else:

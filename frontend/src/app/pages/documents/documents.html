@@ -8,6 +8,8 @@
   </div>
 
   <div class="page-body">
+
+    <!-- Ready Documents -->
     <section class="docs-section">
       <h2 class="docs-title">
         Ready Documents
@@ -35,7 +37,7 @@
                 <th>Chunks</th>
                 <th>Ingestion time</th>
                 <th>Uploaded</th>
-                <th>Actions</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -69,6 +71,13 @@
                         View
                       </button>
                     }
+                    <button class="btn btn--reindex btn--sm" (click)="confirmReindex(doc)" [disabled]="isReindexing(doc.id)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                        <polyline points="23 4 23 10 17 10"/>
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                      </svg>
+                      Reindex
+                    </button>
                     <button class="btn btn--danger btn--sm" (click)="confirmDelete(doc)">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                         <polyline points="3 6 5 6 21 6"/>
@@ -86,6 +95,69 @@
         </div>
       }
     </section>
+
+    <!-- Failed Documents -->
+    @if (failed().length > 0) {
+      <section class="docs-section docs-section--failed">
+        <h2 class="docs-title docs-title--failed">
+          Failed Documents
+          <span class="docs-count docs-count--failed">{{ failed().length }}</span>
+        </h2>
+        <div class="table-wrapper">
+          <table class="docs-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>File name</th>
+                <th>Type</th>
+                <th>Size</th>
+                <th>Uploaded</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (doc of failed(); track doc.id) {
+                <tr class="row--failed">
+                  <td class="doc-id">{{ doc.id }}</td>
+                  <td class="doc-name">
+                    <span class="doc-icon">{{ getFileIcon(doc.original_name) }}</span>
+                    {{ doc.original_name }}
+                  </td>
+                  <td>
+                    <span class="badge"
+                      [class.badge--pdf]="isPdf(doc.original_name)"
+                      [class.badge--txt]="!isPdf(doc.original_name)">
+                      {{ isPdf(doc.original_name) ? 'PDF' : 'TXT' }}
+                    </span>
+                  </td>
+                  <td class="doc-size">{{ formatSize(doc.size) }}</td>
+                  <td class="doc-date">{{ doc.created_at | date:'mediumDate' }}</td>
+                  <td class="doc-actions">
+                    <button class="btn btn--reindex btn--sm" (click)="confirmReindex(doc)" [disabled]="isReindexing(doc.id)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                        <polyline points="23 4 23 10 17 10"/>
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                      </svg>
+                      Reindex
+                    </button>
+                    <button class="btn btn--danger btn--sm" (click)="confirmDelete(doc)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6l-1 14H6L5 6"/>
+                        <path d="M10 11v6M14 11v6"/>
+                        <path d="M9 6V4h6v2"/>
+                      </svg>
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
+
   </div>
 </div>
 
@@ -102,6 +174,25 @@
       <div class="confirm-actions">
         <button class="btn btn--ghost" (click)="cancelDelete()">Cancel</button>
         <button class="btn btn--danger-solid" (click)="deleteDocument()">Delete</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Reindex Confirmation Modal -->
+@if (pendingReindex()) {
+  <div class="modal-backdrop" (click)="cancelReindex()">
+    <div class="modal modal--confirm" (click)="$event.stopPropagation()">
+      <div class="confirm-icon">🔄</div>
+      <h3 class="confirm-title">Reindex file?</h3>
+      <p class="confirm-msg">
+        All existing chunks for
+        <span class="confirm-filename">{{ pendingReindex()!.original_name }}</span>
+        will be deleted and the file will be re-ingested from scratch.
+      </p>
+      <div class="confirm-actions">
+        <button class="btn btn--ghost" (click)="cancelReindex()">Cancel</button>
+        <button class="btn btn--reindex-solid" (click)="reindexDocument()">Reindex</button>
       </div>
     </div>
   </div>

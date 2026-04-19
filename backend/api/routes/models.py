@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Optional
+import httpx
 
 from database.postgres_service import (
     get_all_models, get_model_by_id, insert_model,
@@ -24,6 +25,23 @@ class ModelBody(BaseModel):
 @router.get("/models")
 async def list_models() -> List[Dict]:
     return get_all_models()
+
+
+# =========================
+# OLLAMA MODELS
+# =========================
+@router.get("/models/ollama-tags")
+async def ollama_tags(base_url: str = "http://localhost:11434") -> List[str]:
+    try:
+        from urllib.parse import urlparse
+        p = urlparse(base_url)
+        host = f"{p.scheme}://{p.netloc}"
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{host}/api/tags")
+            resp.raise_for_status()
+            return [m["name"] for m in resp.json().get("models", [])]
+    except Exception:
+        return []
 
 
 # =========================

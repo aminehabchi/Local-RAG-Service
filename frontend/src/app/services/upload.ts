@@ -11,6 +11,7 @@ export interface Document {
   status: string;
   chunk_count: number;
   created_at: string;
+  start_at: string | null;
   ingested_at: string | null;
 }
 
@@ -53,5 +54,9 @@ export class UploadService {
 
   getDocumentChunks(id: number): Observable<Chunk[]> {
     return this.http.get<Chunk[]>(`${this.apiUrl}/documents/${id}/chunks`);
+  }
+
+  reindexDocument(id: number): Observable<{ message: string; file_id: number }> {
+    return this.http.post<{ message: string; file_id: number }>(`${this.apiUrl}/documents/${id}/reindex`, {});
   }
 }

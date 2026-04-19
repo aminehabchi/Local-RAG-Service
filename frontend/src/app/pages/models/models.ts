@@ -25,6 +25,8 @@ export class ModelsPage implements OnInit {
   saving        = signal(false);
   pendingDelete = signal<Model | null>(null);
   showKey       = signal<number | null>(null);
+  ollamaModels  = signal<string[]>([]);
+  ollamaLoading = signal(false);
   form          = EMPTY_FORM();
 
   readonly types = [
@@ -32,6 +34,7 @@ export class ModelsPage implements OnInit {
     { value: 'ollama',    label: 'Ollama' },
     { value: 'openai',    label: 'OpenAI' },
     { value: 'anthropic', label: 'Anthropic' },
+    { value: 'gemini',    label: 'Gemini' },
     { value: 'custom',    label: 'Custom' },
   ];
 
@@ -52,6 +55,7 @@ export class ModelsPage implements OnInit {
     this.editingId.set(null);
     this.modalMode.set('create');
     this.modalOpen.set(true);
+    this.fetchOllamaModels();
   }
 
   openEdit(m: Model): void {
@@ -59,6 +63,23 @@ export class ModelsPage implements OnInit {
     this.editingId.set(m.id);
     this.modalMode.set('edit');
     this.modalOpen.set(true);
+    if (this.isOllama(m.type)) this.fetchOllamaModels(m.base_url ?? undefined);
+  }
+
+  onTypeChange(): void {
+    if (this.isOllama(this.form.type)) this.fetchOllamaModels(this.form.base_url || undefined);
+  }
+
+  fetchOllamaModels(baseUrl?: string): void {
+    this.ollamaLoading.set(true);
+    this.modelsService.getOllamaTags(baseUrl).subscribe({
+      next: (tags) => { this.ollamaModels.set(tags); this.ollamaLoading.set(false); },
+      error: ()    => { this.ollamaModels.set([]); this.ollamaLoading.set(false); },
+    });
+  }
+
+  isOllama(type: string): boolean {
+    return type === 'ollama' || type === 'local';
   }
 
   closeModal(): void { this.modalOpen.set(false); }
@@ -105,6 +126,6 @@ export class ModelsPage implements OnInit {
   }
 
   needsKey(type: string): boolean {
-    return ['openai', 'anthropic', 'custom'].includes(type);
+    return ['openai', 'anthropic', 'gemini', 'custom'].includes(type);
   }
 }

@@ -28,6 +28,17 @@
         </select>
       </label>
 
+      <label class="filter-item">
+        <span class="filter-item__label">Chunks</span>
+        <select class="filter-select" [(ngModel)]="limit" [disabled]="loading()">
+          <option [ngValue]="3">3</option>
+          <option [ngValue]="5">5</option>
+          <option [ngValue]="10">10</option>
+          <option [ngValue]="15">15</option>
+          <option [ngValue]="20">20</option>
+        </select>
+      </label>
+
       @if (messages().length > 0) {
         <button class="btn-clear" (click)="clearChat()" [disabled]="loading()">Clear</button>
       }

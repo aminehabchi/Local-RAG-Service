@@ -46,4 +46,9 @@ export class ModelsService {
   delete(id: number): Observable<{ message: string }> {
     return this.http.delete<{ message: string }>(`${this.api}/models/${id}`);
   }
+
+  getOllamaTags(baseUrl?: string): Observable<string[]> {
+    const params = baseUrl ? `?base_url=${encodeURIComponent(baseUrl)}` : '';
+    return this.http.get<string[]>(`${this.api}/models/ollama-tags${params}`);
+  }
 }

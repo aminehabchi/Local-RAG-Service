@@ -32,6 +32,7 @@ export class ChatPage implements OnInit, AfterViewChecked {
   documents         = signal<Document[]>([]);
   selectedModelId: number | null = null;
   fileId:          number | null = null;
+  limit  = 5;
   input  = '';
   loading = signal(false);
 
@@ -87,6 +88,7 @@ export class ChatPage implements OnInit, AfterViewChecked {
       messages: [...history, { role: 'user', content: text }],
       model_id: this.selectedModelId ?? undefined,
       file_id:  this.fileId,
+      limit:    this.limit,
     }).subscribe({
       next: (res) => {
         this.messages.update(msgs => {

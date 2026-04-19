@@ -110,18 +110,34 @@
       <div class="modal-body">
 
         <div class="field">
-          <label class="field__label">Name <span class="required">*</span></label>
-          <input class="field__input" type="text" [(ngModel)]="form.name"
-                 placeholder="e.g. GPT-4o, Llama 3, Claude 3.5" />
-        </div>
-
-        <div class="field">
           <label class="field__label">Type</label>
-          <select class="field__select" [(ngModel)]="form.type">
+          <select class="field__select" [(ngModel)]="form.type" (ngModelChange)="onTypeChange()">
             @for (t of types; track t.value) {
               <option [value]="t.value">{{ t.label }}</option>
             }
           </select>
+        </div>
+
+        <div class="field">
+          <label class="field__label">Name <span class="required">*</span></label>
+          @if (isOllama(form.type)) {
+            @if (ollamaLoading()) {
+              <div class="field__hint">Loading models…</div>
+            } @else if (ollamaModels().length > 0) {
+              <select class="field__select" [(ngModel)]="form.name">
+                <option value="" disabled>Select a model</option>
+                @for (m of ollamaModels(); track m) {
+                  <option [value]="m">{{ m }}</option>
+                }
+              </select>
+            } @else {
+              <input class="field__input" type="text" [(ngModel)]="form.name"
+                     placeholder="e.g. llama3.2:3b (Ollama not reachable)" />
+            }
+          } @else {
+            <input class="field__input" type="text" [(ngModel)]="form.name"
+                   placeholder="e.g. gpt-4o, claude-3-5-sonnet, gemini-2.5-flash" />
+          }
         </div>
 
         @if (needsKey(form.type)) {

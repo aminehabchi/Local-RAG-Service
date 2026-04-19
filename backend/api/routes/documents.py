@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 
-from database.postgres_service import get_all_files, get_file_by_id, insert_file, delete_file_db, get_chunks_by_file_id
+from database.postgres_service import get_all_files, get_file_by_id, insert_file, delete_file_db, get_chunks_by_file_id, reset_file_for_reindex
 from storage.files_service import delete_file_fs, is_allowed_file, generate_filename, save_file_fs
 from database.ingestion.ingestion_service import ingest_and_store
 
@@ -63,6 +63,21 @@ async def delete_document(file_id: int):
     delete_file_db(file_id)
 
     return {"message": "Document deleted successfully"}
+
+
+# =========================
+# REINDEX DOCUMENT
+# =========================
+@router.post("/documents/{file_id}/reindex")
+async def reindex_document(file_id: int, background_tasks: BackgroundTasks):
+    doc = get_file_by_id(file_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    reset_file_for_reindex(file_id)
+    background_tasks.add_task(ingest_and_store, doc["path"], file_id)
+
+    return {"message": "Reindexing started", "file_id": file_id}
 
 
 # =========================

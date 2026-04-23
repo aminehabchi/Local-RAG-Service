@@ -51,7 +51,8 @@ async def chat(request: ChatRequest) -> Dict:
     # Build system prompt
     if sources:
         context = "\n\n".join(
-            f"[{s['original_name']} — chunk #{s['chunk_index']}]\n{s['content']}"
+            f"[{s['original_name']} — chunk #{s['chunk_index']}]\n"
+            + (s["parent_content"] or s["content"])
             for s in sources
         )
         system_content = (

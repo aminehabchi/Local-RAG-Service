@@ -8,3 +8,4 @@ ollama
 pymupdf
 fastembed
 numpy
+sentence_transformers

@@ -135,6 +135,37 @@ def init_db():
         ON document_chunks USING hnsw (embedding vector_cosine_ops)
         """)
 
+        # ── Rich chunk schema migration ──────────────────────────────────────
+        for col_sql in [
+            "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS parent_content TEXT",
+            "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS parent_embedding vector(384)",
+            "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS concept_title TEXT",
+            "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS chunk_type TEXT DEFAULT 'concept'",
+            "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS keywords TEXT[]",
+            "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS page_number INTEGER",
+            "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS section_title TEXT",
+        ]:
+            cursor.execute(col_sql)
+
+        # Generated tsvector column (only if missing)
+        cursor.execute("""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'document_chunks' AND column_name = 'content_tsv'
+            ) THEN
+                ALTER TABLE document_chunks
+                ADD COLUMN content_tsv TSVECTOR
+                    GENERATED ALWAYS AS (to_tsvector('english', content)) STORED;
+            END IF;
+        END $$
+        """)
+
+        cursor.execute("CREATE INDEX IF NOT EXISTS document_chunks_tsv_gin ON document_chunks USING GIN (content_tsv)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS document_chunks_chunk_type ON document_chunks (chunk_type)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS document_chunks_file_chunk ON document_chunks (file_id, chunk_index)")
+
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS models (
             id SERIAL PRIMARY KEY,
@@ -346,6 +377,43 @@ def update_file_chunk_count(file_id: int, count: int):
 # BATCH INSERT EMBEDDINGS
 # Single connection for all chunks — much faster than one conn per chunk
 # =========================
+def batch_insert_chunks(file_id: int, chunks: List[Dict]) -> None:
+    """Insert rich chunk records produced by the new ingestion pipeline."""
+    conn = _get_conn()
+    try:
+        cursor = conn.cursor()
+        cursor.executemany("""
+            INSERT INTO document_chunks
+                (file_id, chunk_index, content, parent_content,
+                 embedding, parent_embedding,
+                 concept_title, chunk_type, keywords,
+                 page_number, section_title)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, [
+            (
+                file_id,
+                c["chunk_index"],
+                c["content"],
+                c.get("parent_content"),
+                np.array(c["embedding"], dtype=np.float32) if c.get("embedding") else None,
+                np.array(c["parent_embedding"], dtype=np.float32) if c.get("parent_embedding") else None,
+                c.get("concept_title"),
+                c.get("chunk_type", "concept"),
+                c.get("keywords") or None,
+                c.get("page_number"),
+                c.get("section_title"),
+            )
+            for c in chunks
+        ])
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Batch insert chunks error: {e}")
+        raise
+    finally:
+        _put_conn(conn)
+
+
 def batch_insert_embeddings(file_id: int, items: List[Tuple[int, str, List[float]]]) -> None:
     """items: list of (chunk_index, content, embedding)"""
     conn = _get_conn()

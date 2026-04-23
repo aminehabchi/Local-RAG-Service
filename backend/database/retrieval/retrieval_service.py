@@ -18,10 +18,12 @@ def search_similar(
         cursor = conn.cursor()
         q_vec = np.array(query_embedding, dtype=np.float32)
         where = "AND dc.file_id = %s " if file_id is not None else ""
-        extra_params = (file_id,) if file_id is not None else ()
+        extra = (file_id,) if file_id is not None else ()
 
         cursor.execute(f"""
             SELECT dc.id, dc.file_id, dc.chunk_index, dc.content,
+                   dc.parent_content, dc.concept_title, dc.chunk_type,
+                   dc.keywords, dc.page_number, dc.section_title,
                    f.original_name,
                    1 - (dc.embedding <=> %s) AS score
             FROM document_chunks dc
@@ -29,7 +31,7 @@ def search_similar(
             WHERE dc.embedding IS NOT NULL {where}
             ORDER BY dc.embedding <=> %s
             LIMIT %s
-        """, (q_vec, *extra_params, q_vec, limit))
+        """, (q_vec, *extra, q_vec, limit))
 
         return _rows(cursor.fetchall())
     except Exception as e:
@@ -48,20 +50,26 @@ def search_keyword(
     try:
         cursor = conn.cursor()
         where = "AND dc.file_id = %s " if file_id is not None else ""
-        extra_params = (file_id,) if file_id is not None else ()
+        extra = (file_id,) if file_id is not None else ()
 
+        # Use content_tsv generated column when available, fall back to inline
         cursor.execute(f"""
             SELECT dc.id, dc.file_id, dc.chunk_index, dc.content,
+                   dc.parent_content, dc.concept_title, dc.chunk_type,
+                   dc.keywords, dc.page_number, dc.section_title,
                    f.original_name,
-                   ts_rank(to_tsvector('english', dc.content),
-                           plainto_tsquery('english', %s)) AS score
+                   ts_rank(
+                       COALESCE(dc.content_tsv, to_tsvector('english', dc.content)),
+                       plainto_tsquery('english', %s)
+                   ) AS score
             FROM document_chunks dc
             JOIN files f ON f.id = dc.file_id
-            WHERE to_tsvector('english', dc.content) @@ plainto_tsquery('english', %s)
+            WHERE COALESCE(dc.content_tsv, to_tsvector('english', dc.content))
+                  @@ plainto_tsquery('english', %s)
             {where}
             ORDER BY score DESC
             LIMIT %s
-        """, (query, query, *extra_params, limit))
+        """, (query, query, *extra, limit))
 
         rows = _rows(cursor.fetchall())
         return _normalize(rows)
@@ -79,14 +87,12 @@ def search_hybrid(
     file_id: Optional[int] = None,
 ) -> List[Dict]:
     fetch = max(limit * 3, 20)
-
     sem = search_similar(query_embedding, limit=fetch, file_id=file_id)
     try:
         kw = search_keyword(query, limit=fetch, file_id=file_id)
     except Exception:
         kw = []
 
-    # Reciprocal Rank Fusion (k=60)
     k = 60
     rrf: dict[int, float] = {}
     meta: dict[int, dict] = {}
@@ -113,6 +119,12 @@ def _rows(rows) -> List[Dict]:
             "file_id":       row["file_id"],
             "chunk_index":   row["chunk_index"],
             "content":       row["content"],
+            "parent_content": row.get("parent_content"),
+            "concept_title": row.get("concept_title"),
+            "chunk_type":    row.get("chunk_type"),
+            "keywords":      row.get("keywords"),
+            "page_number":   row.get("page_number"),
+            "section_title": row.get("section_title"),
             "score":         float(row["score"]),
             "original_name": row["original_name"],
         }

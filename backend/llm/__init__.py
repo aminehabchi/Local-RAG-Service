@@ -1,7 +1,24 @@
-from llm.ollama import call as call_ollama
-from llm.openai import call as call_openai
-from llm.anthropic import call as call_anthropic
-from llm.custom import call as call_custom
-from llm.gemini import call as call_gemini
+from typing import Dict
 
-__all__ = ["call_ollama", "call_openai", "call_anthropic", "call_custom", "call_gemini"]
+from llm.base import LLMProvider
+from llm.anthropic import AnthropicProvider
+from llm.openai import OpenAIProvider
+from llm.gemini import GeminiProvider
+from llm.ollama import OllamaProvider
+_REGISTRY = {
+    "openai":    lambda m: OpenAIProvider(m["name"], m["api_key"] or ""),
+    "anthropic": lambda m: AnthropicProvider(m["name"], m["api_key"] or ""),
+    "gemini":    lambda m: GeminiProvider(m["name"], m["api_key"] or ""),
+    "ollama":    lambda m: OllamaProvider(m["name"], m["base_url"] or ""),
+    "local":     lambda m: OllamaProvider(m["name"], m["base_url"] or ""),
+}
+
+
+def get_provider(model: Dict) -> LLMProvider:
+    factory = _REGISTRY.get(model["type"])
+    if not factory:
+        raise ValueError(f"Unsupported model type: {model['type']}")
+    return factory(model)
+
+
+__all__ = ["get_provider", "LLMProvider"]

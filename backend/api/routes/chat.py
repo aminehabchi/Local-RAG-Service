@@ -5,7 +5,7 @@ from typing import List, Dict, Optional
 
 from database.retrieval.retrieval_service import embed_query, search_similar
 from database.postgres_service import get_model_by_id, get_all_models
-from llm import call_ollama, call_openai, call_anthropic, call_custom, call_gemini
+from llm import get_provider
 
 router = APIRouter()
 
@@ -67,24 +67,9 @@ async def chat(request: ChatRequest) -> Dict:
     messages += [{"role": m.role, "content": m.content} for m in request.messages]
 
     try:
-        t    = model["type"]
-        name = model["name"]
-        key  = model["api_key"] or ""
-        url  = model["base_url"] or ""
-
-        if t in ("ollama", "local"):
-            answer = await call_ollama(name, url, messages)
-        elif t == "openai":
-            answer = await call_openai(name, key, messages)
-        elif t == "anthropic":
-            answer = await call_anthropic(name, key, messages)
-        elif t == "gemini":
-            answer = await call_gemini(name, key, messages)
-        elif t == "custom":
-            answer = await call_custom(name, key, url, messages)
-        else:
-            raise HTTPException(status_code=400, detail=f"Unsupported model type: {t}")
-
+        answer = await get_provider(model).chat(messages)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:

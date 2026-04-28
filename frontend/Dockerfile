@@ -1,0 +1,15 @@
+FROM node:24-slim AS builder
+
+WORKDIR /app
+
+COPY package*.json .
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+FROM nginx:alpine
+
+COPY --from=builder /app/dist/rag-frontend/browser /usr/share/nginx/html
+
+EXPOSE 80

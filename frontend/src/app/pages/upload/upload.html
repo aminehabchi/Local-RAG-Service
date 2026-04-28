@@ -57,6 +57,7 @@
           }
         </div>
 
+        <div class="queue-list">
         @for (item of uploadQueue(); track item.id; let i = $index) {
           <div class="upload-item" [class]="'upload-item--' + item.phase" [style.animation-delay]="(i * 50) + 'ms'">
 
@@ -134,6 +135,7 @@
 
           </div>
         }
+        </div>
       }
     </section>
 

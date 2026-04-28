@@ -132,7 +132,7 @@ export class UploadPage implements OnInit, OnDestroy {
   private injectProcessingDocs(docs: Document[]): void {
     const trackedDocIds = new Set(this.fileIdMap.values());
     for (const doc of docs) {
-      if (doc.status !== 'processing' && doc.status !== 'failed') continue;
+      if (doc.status !== 'processing' && doc.status !== 'error' && doc.status !== 'failed') continue;
       if (trackedDocIds.has(doc.id)) continue;
 
       const id = nextId();
@@ -147,8 +147,8 @@ export class UploadPage implements OnInit, OnDestroy {
         size: doc.size,
         uploadProgress: 100,
         ingestProgress: progress,
-        phase: doc.status === 'failed' ? 'error' : 'ingesting',
-        error: doc.status === 'failed' ? 'Ingestion failed.' : undefined,
+        phase: (doc.status === 'failed' || doc.status === 'error') ? 'error' : 'ingesting',
+        error: (doc.status === 'failed' || doc.status === 'error') ? 'Ingestion failed.' : undefined,
         chunkCount: doc.chunk_count,
         createdAt: doc.created_at,
       }]);
@@ -194,11 +194,11 @@ export class UploadPage implements OnInit, OnDestroy {
           let anyPending = false;
           this.fileIdMap.forEach((fileId, itemId) => {
             const doc = docs.find(d => d.id === fileId);
-            if (doc?.status === 'done') {
+            if (doc?.status === 'ready') {
               this.stopIngestTimer(itemId);
               this.patch(itemId, { ingestProgress: 100, phase: 'done', chunkCount: doc.chunk_count });
               this.fileIdMap.delete(itemId);
-            } else if (doc?.status === 'failed') {
+            } else if (doc?.status === 'error' || doc?.status === 'failed') {
               this.stopIngestTimer(itemId);
               this.patch(itemId, { phase: 'error', error: 'Ingestion failed.' });
               this.fileIdMap.delete(itemId);

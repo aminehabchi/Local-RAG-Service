@@ -27,15 +27,16 @@ A fully local Retrieval-Augmented Generation (RAG) system. Upload your documents
 
 ## Features
 
-- **Document ingestion** — upload PDF and text files; they are chunked, embedded, and stored in PostgreSQL
+- **Document ingestion** — upload PDF and TXT files; they are cleaned, chunked, embedded, and stored in PostgreSQL
+- **Reindexing** — re-ingest any document from scratch without re-uploading
 - **Chat** — conversational interface backed by RAG; the LLM answers using retrieved context
-- **Search** — three search modes available:
+- **Search** — three search modes:
   - **Semantic** — vector cosine similarity via pgvector
   - **Keyword** — PostgreSQL full-text search (`plainto_tsquery`)
   - **Hybrid** — combines both using Reciprocal Rank Fusion (RRF)
-- **Model management** — add and switch between LLM backends (Ollama, OpenAI, Anthropic, custom OpenAI-compatible)
-- **Document viewer** — browse uploaded files and inspect their chunks
-- **Fully local** — no telemetry, no external APIs required (unless you configure OpenAI / Anthropic models)
+- **Model management** — add and switch between LLM backends (Ollama, OpenAI, Anthropic, Gemini)
+- **Document viewer** — browse uploaded files, inspect chunks, and view PDFs inline
+- **Fully local** — no telemetry, no external APIs required (unless you configure cloud models)
 
 ---
 
@@ -64,11 +65,11 @@ A fully local Retrieval-Augmented Generation (RAG) system. Upload your documents
                                                        │  └───────┬────────┘  │
                                                        │          │           │
                                                        │  ┌───────▼────────┐  │
-                                                       │  │ LLM Router     │  │
+                                                       │  │ LLM Factory    │  │
                                                        │  │ (Ollama /      │  │
                                                        │  │  OpenAI /      │  │
                                                        │  │  Anthropic /   │  │
-                                                       │  │  Custom)       │  │
+                                                       │  │  Gemini)       │  │
                                                        │  └────────────────┘  │
                                                        └──────────────────────┘
 ```
@@ -80,35 +81,43 @@ A fully local Retrieval-Augmented Generation (RAG) system. Upload your documents
 ```
 Local-RAG-Service/
 ├── backend/
-│   ├── main.py                         # FastAPI app entry point
+│   ├── main.py                             # FastAPI app entry point
 │   ├── requirements.txt
 │   ├── api/
 │   │   └── routes/
-│   │       ├── chat.py                 # POST /chat  — RAG + LLM
-│   │       ├── retrieval.py            # POST /search
-│   │       ├── documents.py            # CRUD /documents
-│   │       └── models.py               # CRUD /models
-│   ├── llm/                            # One service file per LLM provider
-│   │   ├── __init__.py                 # Re-exports all call() functions
-│   │   ├── ollama.py                   # Ollama  → /api/generate
-│   │   ├── openai.py                   # OpenAI  → /v1/chat/completions
-│   │   ├── anthropic.py                # Anthropic → /v1/messages
-│   │   └── custom.py                   # Custom OpenAI-compatible endpoint
+│   │       ├── chat.py                     # POST /chat  — RAG + LLM
+│   │       ├── retrieval.py                # POST /search
+│   │       ├── documents.py                # CRUD /documents
+│   │       └── models.py                   # CRUD /models
+│   ├── llm/
+│   │   ├── base.py                         # Abstract LLMProvider
+│   │   ├── __init__.py                     # get_provider() factory
+│   │   ├── ollama.py                       # OllamaProvider
+│   │   ├── openai.py                       # OpenAIProvider
+│   │   ├── anthropic.py                    # AnthropicProvider
+│   │   └── gemini.py                       # GeminiProvider
 │   └── database/
-│       ├── postgres_service.py         # Connection pool, schema, queries
-│       ├── embeddings.py               # fastembed singleton (BAAI/bge-small-en-v1.5)
+│       ├── postgres_service.py             # Connection pool, schema, queries
+│       ├── embedding/
+│       │   └── embeddings_model.py         # fastembed singleton (BAAI/bge-small-en-v1.5)
 │       ├── ingestion/
-│       │   └── ingestion_service.py    # PDF parsing + chunking + embedding
+│       │   ├── ingestion_service.py        # Orchestrates the full ingestion pipeline
+│       │   ├── cleaning.py                 # Text normalisation
+│       │   ├── chunking.py                 # Text splitting
+│       │   └── embedding_inserting.py      # Embeds chunks and writes to DB
 │       └── retrieval/
-│           └── retrieval_service.py    # Semantic / keyword / hybrid search
+│           ├── retrieval_service.py        # Orchestrates search
+│           ├── cleaning.py                 # Query normalisation
+│           └── search.py                   # Semantic / keyword / hybrid queries
 └── frontend/
     └── src/app/
         ├── pages/
-        │   ├── chat/                   # Chat page
-        │   ├── search/                 # Search page (3 modes)
-        │   ├── documents/              # Document list & viewer
-        │   ├── upload/                 # File upload with progress
-        │   └── models/                 # Model CRUD
+        │   ├── home/                       # Landing page
+        │   ├── chat/                       # Chat page
+        │   ├── search/                     # Search page (3 modes)
+        │   ├── documents/                  # Document list, viewer & chunk inspector
+        │   ├── upload/                     # File upload with live progress
+        │   └── models/                     # Model CRUD
         └── services/
             ├── chat.ts
             ├── search.ts
@@ -163,10 +172,10 @@ ng serve                            # opens http://localhost:4200
 
 | Type | Name field | Base URL | API Key |
 |---|---|---|---|
-| Ollama | `llama3.2` | `http://localhost:11434` | — |
+| Local / Ollama | `llama3.2` | `http://localhost:11434` | — |
 | OpenAI | `gpt-4o` | — | your key |
 | Anthropic | `claude-3-5-sonnet-20241022` | — | your key |
-| Custom | model name | endpoint URL | if required |
+| Gemini | `gemini-2.5-flash` | — | your key |
 
 4. Click the ★ to set a default, then open **Chat** and start talking.
 
@@ -174,7 +183,15 @@ ng serve                            # opens http://localhost:4200
 
 ## Embedding Model
 
-Documents are embedded with **[BAAI/bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5)** via `fastembed` (384-dimensional vectors). The model is downloaded automatically on first run and cached locally.
+Documents are embedded with **[BAAI/bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5)** via `fastembed` (384-dimensional vectors). The model is downloaded automatically on first run and cached at `~/.cache/fastembed/` — subsequent runs load it instantly from disk.
+
+---
+
+## LLM Provider Factory
+
+The `llm/` package uses a **factory pattern**. Each provider is a class that inherits from `LLMProvider` and implements a single `chat(messages)` method. `get_provider(model)` resolves the correct class at runtime based on the model type stored in the database.
+
+Adding a new provider requires only two steps: create a new class in `llm/` and register it in `_REGISTRY` inside `llm/__init__.py`.
 
 ---
 
@@ -184,6 +201,9 @@ Documents are embedded with **[BAAI/bge-small-en-v1.5](https://huggingface.co/BA
 |---|---|---|
 | `POST` | `/upload` | Upload and ingest a document |
 | `GET` | `/documents` | List all documents |
+| `GET` | `/documents/{id}/chunks` | List chunks for a document |
+| `GET` | `/documents/{id}/view` | Stream the original file |
+| `POST` | `/documents/{id}/reindex` | Re-ingest a document from scratch |
 | `DELETE` | `/documents/{id}` | Delete a document and its chunks |
 | `POST` | `/search` | Search chunks (semantic / keyword / hybrid) |
 | `POST` | `/chat` | RAG chat with an LLM |
@@ -194,4 +214,3 @@ Documents are embedded with **[BAAI/bge-small-en-v1.5](https://huggingface.co/BA
 | `DELETE` | `/models/{id}` | Delete a model |
 
 ---
-

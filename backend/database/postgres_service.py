@@ -1,20 +1,24 @@
+import logging
+import os
 import psycopg2
 import psycopg2.pool
 import numpy as np
 from pgvector.psycopg2 import register_vector
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, execute_values
 from typing import Optional, List, Dict, Tuple
+
+_log = logging.getLogger(__name__)
 
 
 # =========================
 # DB CONFIG
 # =========================
 DB_CONFIG = {
-    "host": "localhost",
-    "database": "rag_db",
-    "user": "postgres",
-    "password": "postgres",
-    "port": 5432
+    "host":     os.getenv("DB_HOST",     "localhost"),
+    "database": os.getenv("DB_NAME",     "rag_db"),
+    "user":     os.getenv("DB_USER",     "postgres"),
+    "password": os.getenv("DB_PASSWORD", "postgres"),
+    "port":     int(os.getenv("DB_PORT", "5432")),
 }
 
 
@@ -102,69 +106,62 @@ def init_db():
         _ensure_vector(conn)
 
         cursor.execute("""
-        CREATE TABLE IF NOT EXISTS document_chunks (
+        CREATE TABLE IF NOT EXISTS parent_chunks (
             id SERIAL PRIMARY KEY,
-            file_id INTEGER NOT NULL,
+            file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
             chunk_index INTEGER NOT NULL,
             content TEXT NOT NULL,
-            embedding vector(384),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (file_id) REFERENCES files (id) ON DELETE CASCADE
+            page_number INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
 
-        # Migrate existing TEXT column to vector(384)
         cursor.execute("""
-        DO $$
-        BEGIN
-            IF EXISTS (
-                SELECT 1 FROM information_schema.columns
-                WHERE table_name = 'document_chunks'
-                AND column_name = 'embedding'
-                AND data_type = 'text'
-            ) THEN
-                ALTER TABLE document_chunks
-                ALTER COLUMN embedding TYPE vector(384)
-                USING embedding::vector;
-            END IF;
-        END $$
+        CREATE INDEX IF NOT EXISTS parent_chunks_file_id
+        ON parent_chunks (file_id)
         """)
 
         cursor.execute("""
-        CREATE INDEX IF NOT EXISTS document_chunks_embedding_hnsw
-        ON document_chunks USING hnsw (embedding vector_cosine_ops)
+        CREATE TABLE IF NOT EXISTS child_chunks (
+            id SERIAL PRIMARY KEY,
+            file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+            parent_id INTEGER NOT NULL REFERENCES parent_chunks(id) ON DELETE CASCADE,
+            chunk_index INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            embedding vector(384),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
         """)
 
-        # ── Rich chunk schema migration ──────────────────────────────────────
-        for col_sql in [
-            "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS parent_content TEXT",
-            "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS parent_embedding vector(384)",
-            "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS concept_title TEXT",
-            "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS chunk_type TEXT DEFAULT 'concept'",
-            "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS keywords TEXT[]",
-            "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS page_number INTEGER",
-            "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS section_title TEXT",
-        ]:
-            cursor.execute(col_sql)
+        cursor.execute("""
+        CREATE INDEX IF NOT EXISTS child_chunks_embedding_hnsw
+        ON child_chunks USING hnsw (embedding vector_cosine_ops)
+        """)
 
-        # Generated tsvector column (only if missing)
+        cursor.execute("""
+        CREATE INDEX IF NOT EXISTS child_chunks_file_id
+        ON child_chunks (file_id, chunk_index)
+        """)
+
+        # Generated tsvector for full-text search on child content
         cursor.execute("""
         DO $$
         BEGIN
             IF NOT EXISTS (
                 SELECT 1 FROM information_schema.columns
-                WHERE table_name = 'document_chunks' AND column_name = 'content_tsv'
+                WHERE table_name = 'child_chunks' AND column_name = 'content_tsv'
             ) THEN
-                ALTER TABLE document_chunks
+                ALTER TABLE child_chunks
                 ADD COLUMN content_tsv TSVECTOR
                     GENERATED ALWAYS AS (to_tsvector('english', content)) STORED;
             END IF;
         END $$
         """)
 
-        cursor.execute("CREATE INDEX IF NOT EXISTS document_chunks_tsv_gin ON document_chunks USING GIN (content_tsv)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS document_chunks_chunk_type ON document_chunks (chunk_type)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS document_chunks_file_chunk ON document_chunks (file_id, chunk_index)")
+        cursor.execute("""
+        CREATE INDEX IF NOT EXISTS child_chunks_tsv_gin
+        ON child_chunks USING GIN (content_tsv)
+        """)
 
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS models (
@@ -368,85 +365,60 @@ def update_file_chunk_count(file_id: int, count: int):
         conn.commit()
     except Exception as e:
         conn.rollback()
-        print(f"Update chunk count error: {e}")
+        _log.exception("Update chunk count error for file_id=%s", file_id)
     finally:
         _put_conn(conn)
 
 
 # =========================
-# BATCH INSERT EMBEDDINGS
-# Single connection for all chunks — much faster than one conn per chunk
+# BATCH INSERT PARENT + CHILD CHUNKS
 # =========================
 def batch_insert_chunks(file_id: int, chunks: List[Dict]) -> None:
-    """Insert rich chunk records produced by the new ingestion pipeline."""
+    """
+    Insert parent chunks first, then child chunks linked to their parent.
+    chunks: list of records with content, parent_content, page_number, chunk_index, embedding.
+    """
     conn = _get_conn()
     try:
         cursor = conn.cursor()
+
+        # Deduplicate parents preserving insertion order
+        unique_parents: dict[str, int | None] = {}  # content -> page_number
+        for c in chunks:
+            if c["parent_content"] not in unique_parents:
+                unique_parents[c["parent_content"]] = c.get("page_number")
+
+        parent_rows = execute_values(
+            cursor,
+            "INSERT INTO parent_chunks (file_id, chunk_index, content, page_number) VALUES %s RETURNING id, content",
+            [
+                (file_id, idx, pc, pg)
+                for idx, (pc, pg) in enumerate(unique_parents.items())
+            ],
+            fetch=True,
+        )
+        seen: dict[str, int] = {row["content"]: row["id"] for row in parent_rows}
+
+        # Insert children linked to their parent
         cursor.executemany("""
-            INSERT INTO document_chunks
-                (file_id, chunk_index, content, parent_content,
-                 embedding, parent_embedding,
-                 concept_title, chunk_type, keywords,
-                 page_number, section_title)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO child_chunks (file_id, parent_id, chunk_index, content, embedding)
+            VALUES (%s, %s, %s, %s, %s)
         """, [
             (
                 file_id,
+                seen[c["parent_content"]],
                 c["chunk_index"],
                 c["content"],
-                c.get("parent_content"),
-                np.array(c["embedding"], dtype=np.float32) if c.get("embedding") else None,
-                np.array(c["parent_embedding"], dtype=np.float32) if c.get("parent_embedding") else None,
-                c.get("concept_title"),
-                c.get("chunk_type", "concept"),
-                c.get("keywords") or None,
-                c.get("page_number"),
-                c.get("section_title"),
+                np.array(c["embedding"], dtype=np.float32) if c.get("embedding") is not None else None,
             )
             for c in chunks
         ])
+
         conn.commit()
-    except Exception as e:
+    except Exception:
         conn.rollback()
-        print(f"Batch insert chunks error: {e}")
+        _log.exception("Batch insert chunks error for file_id=%s", file_id)
         raise
-    finally:
-        _put_conn(conn)
-
-
-def batch_insert_embeddings(file_id: int, items: List[Tuple[int, str, List[float]]]) -> None:
-    """items: list of (chunk_index, content, embedding)"""
-    conn = _get_conn()
-    try:
-        cursor = conn.cursor()
-        cursor.executemany("""
-            INSERT INTO document_chunks (file_id, chunk_index, content, embedding)
-            VALUES (%s, %s, %s, %s)
-        """, [(file_id, idx, content, np.array(emb, dtype=np.float32)) for idx, content, emb in items])
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        print(f"Batch insert error: {e}")
-        raise
-    finally:
-        _put_conn(conn)
-
-
-# =========================
-# INSERT EMBEDDING (single — kept for compatibility)
-# =========================
-def insert_embedding(document_id: int, content: str, embedding: List[float], chunk_index: int = 0):
-    conn = _get_conn()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO document_chunks (file_id, chunk_index, content, embedding)
-            VALUES (%s, %s, %s, %s)
-        """, (document_id, chunk_index, content, np.array(embedding, dtype=np.float32)))
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        print(f"Insert embedding error: {e}")
     finally:
         _put_conn(conn)
 
@@ -478,7 +450,8 @@ def delete_chunks_by_file_id(file_id: int) -> None:
     conn = _get_conn()
     try:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM document_chunks WHERE file_id = %s", (file_id,))
+        # Deleting parent_chunks cascades to child_chunks
+        cursor.execute("DELETE FROM parent_chunks WHERE file_id = %s", (file_id,))
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -494,7 +467,7 @@ def reset_file_for_reindex(file_id: int) -> None:
     conn = _get_conn()
     try:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM document_chunks WHERE file_id = %s", (file_id,))
+        cursor.execute("DELETE FROM parent_chunks WHERE file_id = %s", (file_id,))
         cursor.execute("""
             UPDATE files
             SET status = 'processing', chunk_count = 0, start_at = NOW(), ingested_at = NULL
@@ -567,10 +540,12 @@ def get_chunks_by_file_id(file_id: int) -> List[Dict]:
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, chunk_index, content
-            FROM document_chunks
-            WHERE file_id = %s
-            ORDER BY chunk_index ASC
+            SELECT cc.id, cc.chunk_index, cc.content,
+                   pc.content AS parent_content, pc.page_number
+            FROM child_chunks cc
+            JOIN parent_chunks pc ON pc.id = cc.parent_id
+            WHERE cc.file_id = %s
+            ORDER BY cc.chunk_index ASC
         """, (file_id,))
         return cursor.fetchall()
     except Exception as e:

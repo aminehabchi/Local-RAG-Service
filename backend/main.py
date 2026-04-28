@@ -6,7 +6,7 @@ from api.routes.retrieval import router as retrieval_router
 from api.routes.models import router as models_router
 from api.routes.chat import router as chat_router
 from database.postgres_service import init_db, fail_processing_files
-from database.embeddings import get_embeddings_model
+from database.embedding.embeddings_model import get_embeddings_model
 
 
 @asynccontextmanager

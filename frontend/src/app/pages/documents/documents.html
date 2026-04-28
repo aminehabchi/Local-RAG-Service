@@ -111,6 +111,7 @@
                 <th>File name</th>
                 <th>Type</th>
                 <th>Size</th>
+                <th>Status</th>
                 <th>Uploaded</th>
                 <th></th>
               </tr>
@@ -131,6 +132,9 @@
                     </span>
                   </td>
                   <td class="doc-size">{{ formatSize(doc.size) }}</td>
+                  <td>
+                    <span class="status-badge status-badge--error">{{ doc.status }}</span>
+                  </td>
                   <td class="doc-date">{{ doc.created_at | date:'mediumDate' }}</td>
                   <td class="doc-actions">
                     <button class="btn btn--reindex btn--sm" (click)="confirmReindex(doc)" [disabled]="isReindexing(doc.id)">

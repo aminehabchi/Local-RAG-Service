@@ -22,7 +22,7 @@ export class DocumentsPage implements OnInit {
   loadingChunks  = signal(false);
 
   done   = computed(() => this.documents().filter(d => d.status === 'ready'));
-  failed = computed(() => this.documents().filter(d => d.status === 'failed'));
+  failed = computed(() => this.documents().filter(d => d.status === 'failed' || d.status === 'error'));
 
   constructor(
     private uploadService: UploadService,

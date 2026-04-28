@@ -110,6 +110,13 @@
   animation: fade-in 0.18s ease;
 }
 
+.queue-list {
+  max-height: calc(7 * 5.5rem);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
 .queue-header {
   display: flex;
   align-items: center;

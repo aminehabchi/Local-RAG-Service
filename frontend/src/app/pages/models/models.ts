@@ -35,7 +35,6 @@ export class ModelsPage implements OnInit {
     { value: 'openai',    label: 'OpenAI' },
     { value: 'anthropic', label: 'Anthropic' },
     { value: 'gemini',    label: 'Gemini' },
-    { value: 'custom',    label: 'Custom' },
   ];
 
   constructor(private modelsService: ModelsService) {}
@@ -126,6 +125,6 @@ export class ModelsPage implements OnInit {
   }
 
   needsKey(type: string): boolean {
-    return ['openai', 'anthropic', 'gemini', 'custom'].includes(type);
+    return ['openai', 'anthropic', 'gemini'].includes(type);
   }
 }
